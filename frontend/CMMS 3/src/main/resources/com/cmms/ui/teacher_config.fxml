@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" 
+      fx:controller="com.cmms.ui.TeacherConfigController" 
+      spacing="15.0" style="-fx-padding: 25;" alignment="CENTER_LEFT">
+
+    <Label text="Configure New Session" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+
+    <VBox spacing="10">
+        <Label text="Session Type:" style="-fx-font-weight: bold;"/>
+        <fx:define>
+            <ToggleGroup fx:id="sessionTypeToggleGroup" />
+        </fx:define>
+        <RadioButton fx:id="blockAppsRadio" text="Block Applications Only" toggleGroup="$sessionTypeToggleGroup" selected="true"/>
+        <RadioButton fx:id="blockAppsWebsitesRadio" text="Block Applications AND Specific Websites (Blacklist)" toggleGroup="$sessionTypeToggleGroup"/>
+        <RadioButton fx:id="allowWebsitesRadio" text="Allow Specific Websites &amp; Block Apps (Note: Does not block other sites)" toggleGroup="$sessionTypeToggleGroup"/>
+    </VBox>
+
+    <CheckBox fx:id="blockUsbCheckbox" text="Block USB Storage Devices" selected="true"/>
+    
+    <HBox spacing="10" alignment="CENTER_LEFT">
+         <Button fx:id="startSessionButton" text="Start Session &amp; Go to Dashboard" onAction="#handleStartSessionAction"/>
+         <Button fx:id="backButton" text="Back" onAction="#handleBackAction" cancelButton="true"/>
+    </HBox>
+    
+     <ProgressIndicator fx:id="loadingIndicator" visible="false" maxWidth="30" maxHeight="30"/>
+     <Label fx:id="statusLabel" text="" style="-fx-text-fill: red;"/>
+
+</VBox> 

@@ -1,8 +1,6 @@
 /**
- * Defines routes related to student actions within a session.
+ * Defines REST routes for initial student actions, primarily joining a session.
  * Base Path: /api/session/:code/student
- * Includes joining and disconnecting from a session.
- * Input validation is applied.
  */
 const express = require('express');
 const router = express.Router({ mergeParams: true });
@@ -18,27 +16,20 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// --- Routes ---
-
-// Validate input for the join route
+// Route for student to join and get a token
 router.post(
     '/join',
     [
+        // Validation for the join request body
         body('studentName').trim().notEmpty().withMessage('studentName is required').escape(),
-        body('studentId').trim().notEmpty().withMessage('studentId is required').escape(), // Note: Controller might use studentPcId
         body('class').trim().notEmpty().withMessage('class is required').escape(),
         body('rollNo').trim().notEmpty().withMessage('rollNo is required').escape(),
+        body('studentPcId').optional().trim().escape() // Optional PC ID
     ],
     handleValidationErrors, 
     studentController.join 
 );
 
-router.put('/disconnect', 
-    [
-        body('studentPcId').trim().notEmpty().withMessage('studentPcId is required').escape(),
-    ],
-    handleValidationErrors,
-    studentController.disconnect
-);
+// Disconnect is handled via WebSocket state/close event
 
-module.exports = router;
+module.exports = router; 

@@ -1,16 +1,92 @@
 /**
- * Controller functions for student actions within a session.
- * Handles joining and disconnecting students.
+ * Controller for handling student-related actions, primarily joining sessions.
  */
-const crypto = require('crypto');
 const MongoDBHelper = require("../utils/MongoDBHelper");
+const jwt = require('jsonwebtoken'); // Needed for JWT
+const crypto = require('crypto'); // <-- Added missing import
 
+/**
+ * Generates a JWT for a student joining a session.
+ */
+const generateStudentToken = (sessionCode, studentId, expiresIn = '2h') => {
+    const payload = {
+        userId: studentId,
+        role: 'student',
+        sessionCode: sessionCode
+    };
+    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
+};
+
+/**
+ * POST /api/student/join
+ * Allows a student to join an active session.
+ * Expects { sessionCode, studentId } in the request body.
+ */
+exports.joinSession = async (req, res) => {
+    try {
+        const { sessionCode, studentId } = req.body;
+
+        if (!sessionCode || !studentId) {
+            return res.status(400).json({ message: "Session code and student ID are required." });
+        }
+
+        const sessionsCollection = MongoDBHelper.getCollection("sessions");
+        const session = await sessionsCollection.findOne({ session_code: sessionCode, isSessionOn: true });
+
+        if (!session) {
+            return res.status(404).json({ message: "Active session not found or session is closed." });
+        }
+        
+        // We have the session, extract relevant settings
+        const { sessionType, blockUsb, websiteBlacklist, websiteWhitelist } = session;
+
+        // Generate the token for WebSocket authentication
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error("FATAL: JWT_SECRET environment variable not set.");
+            return res.status(500).json({ message: "Server configuration error." });
+        }
+
+        const tokenPayload = {
+            userId: studentId, // Use the generated or existing ID
+            role: 'student',
+            sessionCode: sessionCode, // Include session code
+            // Add student details directly to token
+            studentName: studentName, 
+            rollNo: rollNo,
+            class: studentClass
+        };
+        const token = jwt.sign(tokenPayload, jwtSecret, { expiresIn: '1h' });
+
+        console.log(`Student ${studentId} attempting to join session ${sessionCode}`);
+        res.status(200).json({
+            message: "Ready to join session via WebSocket.",
+            sessionCode: sessionCode,
+            studentId: studentId,
+            token: token, // Send token for the student to authenticate WebSocket
+            settings: { // Include session settings for the client
+                sessionType: sessionType,
+                blockUsb: blockUsb,
+                websiteBlacklist: websiteBlacklist || [], // Ensure arrays exist
+                websiteWhitelist: websiteWhitelist || []  // Ensure arrays exist
+            }
+        });
+
+    } catch (error) {
+        console.error("Error joining session:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+// Handles the initial student join via REST to get a token
 exports.join = async (req, res) => {
   try {
-    const { studentName, class: studentClass, rollNo, studentPcId } = req.body;
+    // studentId from validator is not used here, uses body directly
+    const { studentName, class: studentClass, rollNo } = req.body; 
+    const studentPcId = req.body.studentPcId; // Get potentially optional PC ID
     const sessionCode = req.params.code; 
 
-    // --- CHECK SESSION FIRST ---
+    // Validate session exists and is active
     const sessionsCollection = MongoDBHelper.getCollection("sessions");
     const session = await sessionsCollection.findOne({ 
       session_code: sessionCode, 
@@ -22,122 +98,90 @@ exports.join = async (req, res) => {
     if (session.expiresAt && new Date() > new Date(session.expiresAt)) {
       return res.status(400).json({ message: "Session expired" });
     }
-    // --- END CHECK SESSION ---
     
-    // Now check student data
+    // Check required student data (Input validation should handle this mostly)
     if (!studentName || !studentClass || !rollNo) {
-      return res.status(400).json({ message: "Missing required student data" });
+      return res.status(400).json({ message: "Missing required student data (Name, Class, RollNo)" });
     }
 
-    
+    // Generate student PC ID if not provided
+    const finalStudentPcId = studentPcId || crypto.randomBytes(16).toString('hex');
+
+    // Create student document
     const studentDoc = {
       session_code: sessionCode,
       student_name: studentName,
       class: studentClass,
       roll_no: rollNo,
-      student_pc: studentPcId || crypto.randomBytes(8).toString('hex'),
-      isConnected: true,
+      student_pc: finalStudentPcId, 
+      isConnected: false, // Will connect via WebSocket after getting token
       joinedAt: new Date()
     };
 
-    
     const studentsCollection = MongoDBHelper.getCollection("students");
-    const result = await studentsCollection.insertOne(studentDoc);
-    if (!result.acknowledged) {
+    // Consider adding a check if student_pc already exists for this session?
+    const insertResult = await studentsCollection.insertOne(studentDoc);
+    if (!insertResult.insertedId) {
       return res.status(500).json({ message: "Failed to save student data" });
     }
 
-    
     await sessionsCollection.updateOne(
       { session_code: sessionCode },
       { $inc: { studentCount: 1 } }
     );
 
+    // Generate JWT for this student
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+        console.error('FATAL ERROR: JWT_SECRET is not defined in .env');
+        return res.status(500).json({ message: "Server configuration error: JWT secret missing." }); 
+    }
     
+    const studentTokenPayload = {
+        userId: finalStudentPcId, 
+        role: 'student',
+        sessionCode: sessionCode,
+        studentName: studentName, 
+        rollNo: rollNo,
+        class: studentClass
+    };
+
+    // Calculate expiry based on session remaining time
+    const sessionDurationMinutes = session.expiresAt ? Math.max(1, Math.ceil((new Date(session.expiresAt).getTime() - Date.now()) / 60000)) : 60;
+    const studentToken = jwt.sign(
+        studentTokenPayload, 
+        jwtSecret, 
+        { expiresIn: `${sessionDurationMinutes}m` } 
+    );
+
+    // We have the session document from earlier validation
+    const { sessionType, blockUsb, websiteBlacklist, websiteWhitelist } = session;
+
     res.status(201).json({
-      student_pc: studentDoc.student_pc,
-      message: "Successfully joined session"
+      student_pc: finalStudentPcId,
+      token: studentToken, // Send token needed for WebSocket auth
+      message: "Successfully registered. Use token to authenticate WebSocket.",
+      settings: { // Include session settings for the client
+        sessionType: sessionType,
+        blockUsb: blockUsb,
+        websiteBlacklist: websiteBlacklist || [], // Ensure arrays exist
+        websiteWhitelist: websiteWhitelist || []  // Ensure arrays exist
+      }
     });
   } catch (error) {
-    console.error("Error in join session:", error);
-    res.status(500).json({ message: "Server Error" });
+    console.error("Error in REST join session:", error);
+    // Handle potential duplicate key errors if student_pc is unique index
+    if (error.code === 11000) { 
+        return res.status(409).json({ message: "Conflict: Student PC ID likely already registered for this session." });
+    }
+    res.status(500).json({ message: "Server Error joining session" });
   }
 };
 
-
+// Keep disconnect logic here? Or move to WebSocket?
+// Moving to WebSocket seems more appropriate as it relates to the connection state.
+/*
 exports.disconnect = async (req, res) => {
-  try {
-    const sessionCode = req.params.code;
-    const { studentPcId } = req.body;
-
-    // Check body first (via validator) - handled by router
-    // if (!studentPcId) {
-    //   return res.status(400).json({ message: "Missing studentPcId in request body" });
-    // }
-
-    const studentsCollection = MongoDBHelper.getCollection("students");
-    const sessionsCollection = MongoDBHelper.getCollection("sessions");
-
-    // --- CHECK SESSION FIRST ---
-    const session = await sessionsCollection.findOne({ session_code: sessionCode });
-    if (!session) {
-      // Use 404 for consistency if session doesn't exist
-      return res.status(404).json({ message: "Session not found" }); 
-    }
-    // Optional: Check if session is active? Depends on if disconnect should work on inactive sessions
-    // if (!session.isSessionOn) {
-    //     return res.status(400).json({ message: "Session is inactive" });
-    // }
-    // --- END CHECK SESSION ---
-
-    // Now find the student within the (valid) session
-    const student = await studentsCollection.findOne({
-      session_code: sessionCode,
-      student_pc: studentPcId,
-      isConnected: true,
-    });
-    if (!student) {
-      return res.status(404).json({ message: "Student not found or already disconnected" });
-    }
-
-    
-    const disconnectTime = new Date();
-    const totalTimeConnected = Math.floor((disconnectTime - new Date(student.joinedAt)) / 1000);
-
-    
-    let remainingDuration = null;
-    if (session.expiresAt) {
-      remainingDuration = Math.max(0, Math.floor((new Date(session.expiresAt) - disconnectTime) / 1000));
-    }
-
-    
-    const result = await studentsCollection.updateOne(
-      { _id: student._id },
-      { $set: { isConnected: false, disconnectedAt: disconnectTime } }
-    );
-    if (result.modifiedCount === 0) {
-      return res.status(500).json({ message: "Failed to disconnect student" });
-    }
-
-    
-    await sessionsCollection.updateOne(
-      { session_code: sessionCode },
-      { $inc: { studentCount: -1 } }
-    );
-
-    
-    res.status(200).json({
-      message: "Student disconnected successfully",
-      student: {
-        student_name: student.student_name,
-        class: student.class,
-        roll_no: student.roll_no,
-        totalTimeConnected, 
-      },
-      remainingSessionDuration: remainingDuration 
-    });
-  } catch (error) {
-    console.error("Error disconnecting student:", error);
-    res.status(500).json({ message: "Server Error" });
-  }
+  // ... Original disconnect logic ... 
 };
+*/ 

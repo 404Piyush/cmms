@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" 
+      fx:controller="com.cmms.ui.StudentJoinController" 
+      spacing="10.0" style="-fx-padding: 20;" alignment="CENTER_LEFT">
+
+    <padding>
+        <Insets bottom="20.0" left="20.0" right="20.0" top="20.0"/>
+    </padding>
+
+    <Label text="Join Session" style="-fx-font-weight: bold;"/>
+
+    <GridPane hgap="10" vgap="5">
+        <Label text="Session Code:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+        <TextField fx:id="sessionCodeField" promptText="Enter 6-char code" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+        <Label text="Student Name:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+        <TextField fx:id="studentNameField" promptText="Enter your full name" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+        <Label text="Roll No.:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+        <TextField fx:id="rollNoField" promptText="Enter your roll number" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+        
+        <Label text="Class/Batch:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+        <TextField fx:id="classField" promptText="Enter your class or batch" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+        
+        <columnConstraints>
+            <ColumnConstraints hgrow="NEVER" minWidth="100.0"/>
+            <ColumnConstraints hgrow="ALWAYS" />
+        </columnConstraints>
+    </GridPane>
+
+    <HBox spacing="10" alignment="CENTER">
+        <Button fx:id="joinButton" text="Join Session" onAction="#handleJoinAction"/>
+        <Button fx:id="backButton" text="Back" onAction="#handleBackAction"/>
+    </HBox>
+
+    <ProgressIndicator fx:id="loadingIndicator" visible="false" maxWidth="50.0"/>
+    <Label fx:id="statusLabel" text=""/>
+
+</VBox> 
