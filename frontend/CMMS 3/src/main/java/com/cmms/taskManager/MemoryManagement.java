@@ -1,10 +1,10 @@
 package com.cmms.taskManager;
 
 import com.cmms.CommonFunctions;
-import com.sun.management.OperatingSystemMXBean;
+import java.lang.management.OperatingSystemMXBean;
+import java.lang.management.ManagementFactory;
 
 import java.io.*;
-import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
@@ -106,8 +106,18 @@ public class MemoryManagement {
     private static List<String> getCurrentMemoryProcessesWin(double memoryThreshold) throws Exception {
 
         List<String> memoryProcesses = new ArrayList<>();
-        OperatingSystemMXBean osBean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
-        long totalMemory = osBean.getTotalPhysicalMemorySize();
+        OperatingSystemMXBean osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+        long totalMemory = -1;
+        try {
+            // Use fully qualified name for the check and cast
+            if (osBean instanceof com.sun.management.OperatingSystemMXBean) {
+                totalMemory = ((com.sun.management.OperatingSystemMXBean) osBean).getTotalMemorySize();
+            } else {
+                System.err.println("MemoryManagement: Could not cast to com.sun.management.OperatingSystemMXBean to get total memory size.");
+            }
+        } catch (Exception e) {
+            System.err.println("MemoryManagement: Error getting total memory size: " + e.getMessage());
+        }
         Process process = Runtime.getRuntime().exec("tasklist /fo csv /nh");
         BufferedReader input = new BufferedReader(new InputStreamReader(process.getInputStream()));
         String line;

@@ -23,8 +23,8 @@ import java.net.URL;
 public class Main extends Application {
 
     // Configuration - Replace with your actual backend URLs
-    private static final String API_BASE_URL = "http://localhost:5001/api";
-    private static final String WEBSOCKET_URL = "ws://localhost:5001";
+    private static final String API_BASE_URL = "https://cmms-backend-rdyn.onrender.com/api";
+    private static final String WEBSOCKET_URL = "wss://cmms-backend-rdyn.onrender.com";
 
     private static Stage primaryStage;
     private static ApiService apiService;
@@ -37,6 +37,16 @@ public class Main extends Application {
         // Initialize services
         apiService = new ApiService(API_BASE_URL);
         webSocketService = new WebSocketService(WEBSOCKET_URL);
+        
+        // Ensure critical network services are accessible
+        try {
+            System.out.println("Setting up network protection for critical domains...");
+            Class.forName("com.cmms.networkManager.NetworkManagerWin").getDeclaredMethod("whitelistCriticalServices").invoke(null);
+            System.out.println("Network protection setup complete.");
+        } catch (Exception e) {
+            System.err.println("Warning: Could not set up network protection: " + e.getMessage());
+            // Continue anyway, as this is just a precaution
+        }
 
         // Load initial role selection view
         loadRoleSelectionView();
@@ -114,7 +124,9 @@ public class Main extends Application {
     }
 
     // Overloaded method to load monitor view and pass data
-    public static void loadStudentMonitorView(String authToken, SessionSettings settings, String sessionCode, String studentId, String studentName) {
+    // Updated signature to include class and roll number
+    public static void loadStudentMonitorView(String authToken, SessionSettings settings, String sessionCode, 
+                                            String studentId, String studentName, String studentClass, String studentRollNo) { 
         try {
             String fxmlPath = "/com/cmms/ui/student_monitor.fxml";
             URL fxmlUrl = Main.class.getResource(fxmlPath);
@@ -137,7 +149,8 @@ public class Main extends Application {
 
             // Pass the session data to the specific controller method
             if (controller instanceof StudentMonitorController) {
-                ((StudentMonitorController) controller).setSessionData(authToken, settings, sessionCode, studentId, studentName);
+                // Pass all required arguments
+                ((StudentMonitorController) controller).setSessionData(authToken, settings, sessionCode, studentId, studentName, studentClass, studentRollNo);
             } else {
                  System.err.println("Error: Loaded controller is not an instance of StudentMonitorController");
                  showError("Internal Error", "Could not initialize monitoring screen properly.");
@@ -247,5 +260,37 @@ public class Main extends Application {
         // Launch JavaFX application
         System.out.println("Admin check passed, launching JavaFX application...");
         launch(args);
+    }
+    
+    // Helper method to extract the domain from a URL
+    public static String getDomainFromUrl(String urlString) {
+        if (urlString == null) return null;
+        try {
+            java.net.URL url = new java.net.URL(urlString);
+            return url.getHost();
+        } catch (java.net.MalformedURLException e) {
+            System.err.println("Error parsing URL to get domain: " + urlString + " - " + e.getMessage());
+            // Fallback for simple cases if URL parsing fails
+            String temp = urlString.replaceFirst("^(ws|wss|http|https)://", "");
+            int slashIndex = temp.indexOf('/');
+            if (slashIndex != -1) {
+                temp = temp.substring(0, slashIndex);
+            }
+             int portIndex = temp.indexOf(':');
+            if (portIndex != -1) {
+                temp = temp.substring(0, portIndex);
+            }
+            return temp.isEmpty() ? null : temp;
+        }
+    }
+
+    // Static getter for the backend API domain
+    public static String getBackendApiDomain() {
+        return getDomainFromUrl(API_BASE_URL);
+    }
+    
+    // Static getter for the backend WebSocket domain
+    public static String getBackendWebSocketDomain() {
+        return getDomainFromUrl(WEBSOCKET_URL);
     }
 }

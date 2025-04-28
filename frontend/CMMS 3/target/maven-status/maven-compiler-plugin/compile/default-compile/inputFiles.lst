@@ -8,7 +8,10 @@ C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\c
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\dto\Session.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\dto\SessionSettings.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\dto\WebSocketMessage.java
+C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\Launcher.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\Main.java
+C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\networkManager\FirewallManager.java
+C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\networkManager\NetworkManager.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\networkManager\NetworkManagerMac.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\networkManager\NetworkManagerWin.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\networkManager\WebsiteBlocker.java
@@ -23,6 +26,7 @@ C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\c
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\taskManager\MemoryManagement.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\taskManager\TaskManagement.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\taskManager\win\AsyncManager.java
+C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\TestNetworkManager.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\ui\RoleSelectionController.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\ui\StudentDetailController.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\ui\StudentJoinController.java

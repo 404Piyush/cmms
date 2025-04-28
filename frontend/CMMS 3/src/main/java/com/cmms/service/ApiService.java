@@ -30,6 +30,8 @@ public class ApiService {
 
     // Store the teacher token after session creation/authentication
     private String teacherAuthToken = null;
+    // Store the student token after joining a session
+    private String studentAuthToken = null;
 
     public ApiService(String baseUrl) {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
@@ -116,7 +118,15 @@ public class ApiService {
         try (Response response = okHttpClient.newCall(request).execute()) {
             Type responseType = new TypeToken<ApiResponse<Object>>() {}.getType();
             // Need to handle potential errors during response body processing
-            return handleOkHttpResponse(response, responseType);
+            ApiResponse<Object> apiResponse = handleOkHttpResponse(response, responseType);
+
+            // Store the student token upon successful join
+            if (apiResponse != null && apiResponse.getToken() != null) {
+                 this.studentAuthToken = apiResponse.getToken();
+                 System.out.println("Stored student token: " + this.studentAuthToken); // Log student token
+            }
+
+            return apiResponse;
         }
     }
 
@@ -152,6 +162,54 @@ public class ApiService {
         try (Response response = okHttpClient.newCall(request).execute()) {
             Type responseType = new TypeToken<ApiResponse<Object>>() {}.getType();
             return handleOkHttpResponse(response, responseType);
+        }
+    }
+
+    /**
+     * Reports a blocked application attempt by the student.
+     * Requires the student token to be set via joinSession first.
+     * @param studentId The ID of the student making the report.
+     * @param appName The name of the blocked application.
+     * @throws IOException If network error occurs.
+     * @throws ApiException If API returns an error status or no student token is available.
+     */
+    public void reportBlockedAppAttempt(String studentId, String appName)
+            throws IOException, ApiException {
+
+        if (this.studentAuthToken == null) {
+            throw new ApiException("Cannot report blocked app: Student not authenticated (token missing).");
+        }
+
+        Map<String, Object> requestMap = new HashMap<>();
+        requestMap.put("studentId", studentId);
+        requestMap.put("appName", appName);
+        String jsonBody = gson.toJson(requestMap);
+
+        RequestBody body = RequestBody.create(jsonBody, JSON);
+
+        Request request = new Request.Builder()
+                .url(baseUrl + "student/report-block") // Endpoint for reporting blocked apps
+                .header("Authorization", "Bearer " + this.studentAuthToken)
+                .post(body)
+                .build();
+
+        System.out.println("--- Sending API Request (OkHttp) [Report Blocked App] ---");
+        System.out.println("Method: " + request.method());
+        System.out.println("URL: " + request.url());
+        System.out.println("Headers: " + request.headers());
+        System.out.println("Body JSON: " + jsonBody);
+
+        try (Response response = okHttpClient.newCall(request).execute()) {
+            // Use the existing handler, but expect no specific data back (ApiResponse<Object>)
+            // We don't need the return value here, just need to check for exceptions.
+            handleOkHttpResponse(response, new TypeToken<ApiResponse<Object>>() {}.getType());
+            System.out.println("Successfully reported blocked app: " + appName);
+        } catch (ApiException e) {
+            System.err.println("API Error reporting blocked app: " + e.getMessage());
+            throw e; // Re-throw API exceptions
+        } catch (IOException e) {
+            System.err.println("Network Error reporting blocked app: " + e.getMessage());
+            throw e; // Re-throw IO exceptions
         }
     }
 
@@ -236,4 +294,9 @@ public class ApiService {
      // public void setTeacherAuthToken(String token) {
      //    this.teacherAuthToken = token;
      // }
+
+     // Added getter for student token (optional, depends on usage)
+     public String getStudentAuthToken() {
+          return studentAuthToken;
+     }
 } 

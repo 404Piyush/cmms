@@ -17,6 +17,7 @@ const MongoDBHelper = require("./utils/MongoDBHelper");
 const connectDB = require("./config/db");
 const sessionRoutes = require("./routes/sessionRoutes"); // For session create/end REST endpoints
 const ConnectionManager = require('./utils/ConnectionManager'); // Assumed utility for monitoring
+const sessionStore = require('./utils/sessionStore'); // Import the session store
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -54,23 +55,15 @@ app.use("/api/session", sessionRoutes);
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// In-memory store for active WebSocket sessions and associated connections
-// Structure: { sessionCode: { teacher: WebSocket | null, students: Map<userId, WebSocket> } }
-const sessions = {}; 
-
-// Getter function to avoid circular dependency issues
-const getWebSocketSessions = () => sessions;
-module.exports.getWebSocketSessions = getWebSocketSessions; 
-
 // Helper function to broadcast settings updates to all students in a session
 const broadcastSettingsUpdate = (sessionCode, updatePayload) => {
-    const targetSession = getWebSocketSessions()[sessionCode]; // Use getter
+    const targetSession = sessionStore.getWebSocketSessions()[sessionCode]; // Use getter from sessionStore
     if (!targetSession || !targetSession.students) return;
     
     const messageToSend = JSON.stringify({ type: 'settings_update', payload: updatePayload });
     
     targetSession.students.forEach((studentWs) => {
-        if (studentWs.readyState === ws.OPEN) {
+        if (studentWs.readyState === 1) { // WebSocket.OPEN = 1
             studentWs.send(messageToSend);
         }
     });
@@ -108,7 +101,7 @@ wss.on('connection', (ws, req) => {
         };
         
         const broadcastToSession = (targetSessionCode, messageToSend, senderWs = null) => {
-            const targetSession = getWebSocketSessions()[targetSessionCode];
+            const targetSession = sessionStore.getWebSocketSessions()[targetSessionCode];
             if (!targetSession) return;
             const stringifiedMessage = JSON.stringify(messageToSend);
             if (targetSession.teacher && targetSession.teacher !== senderWs && targetSession.teacher.readyState === ws.OPEN) {
@@ -122,7 +115,7 @@ wss.on('connection', (ws, req) => {
         };
         
         const sendToUser = (targetSessionCode, targetUserId, messageToSend) => {
-             const targetSession = getWebSocketSessions()[targetSessionCode];
+             const targetSession = sessionStore.getWebSocketSessions()[targetSessionCode];
              if (!targetSession) return false;
              const stringifiedMessage = JSON.stringify(messageToSend);
              if(targetSession.teacher && targetSession.teacher.userId === targetUserId && targetSession.teacher.readyState === ws.OPEN) {
@@ -168,10 +161,11 @@ wss.on('connection', (ws, req) => {
                     return;
                 }
 
-                if (!getWebSocketSessions()[ws.sessionCode]) {
-                    getWebSocketSessions()[ws.sessionCode] = { teacher: null, students: new Map() };
+                const sessions = sessionStore.getWebSocketSessions();
+                if (!sessions[ws.sessionCode]) {
+                    sessions[ws.sessionCode] = { teacher: null, students: new Map() };
                 }
-                const currentSession = getWebSocketSessions()[ws.sessionCode];
+                const currentSession = sessions[ws.sessionCode];
 
                 if (ws.role === 'teacher') {
                     if (currentSession.teacher && currentSession.teacher !== ws) {
@@ -257,7 +251,7 @@ wss.on('connection', (ws, req) => {
             const currentSessionCode = ws.sessionCode;
             const currentUserId = ws.userId;
             const currentRole = ws.role;
-            const currentSession = getWebSocketSessions()[currentSessionCode];
+            const currentSession = sessionStore.getWebSocketSessions()[currentSessionCode];
             
             if (!currentSession) throw new Error(`Session ${currentSessionCode} missing for authenticated user ${currentUserId}`);
 
@@ -491,7 +485,7 @@ wss.on('connection', (ws, req) => {
             const currentSessionCode = ws.sessionCode;
             const currentUserId = ws.userId;
             const currentRole = ws.role;
-            const currentSession = getWebSocketSessions()[currentSessionCode];
+            const currentSession = sessionStore.getWebSocketSessions()[currentSessionCode];
 
             if (currentSession) {
                 if (currentRole === 'teacher' && currentSession.teacher === ws) {

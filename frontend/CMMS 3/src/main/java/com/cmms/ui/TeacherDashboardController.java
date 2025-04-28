@@ -115,6 +115,12 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
                  authenticateWebSocket();
             }
         }
+        
+        // Ensure teacher machine is identified correctly
+        com.cmms.networkManager.NetworkManagerWin.setTeacherMachine(true);
+        // com.cmms.networkManager.NetworkManagerWin.whitelistCriticalServices();
+
+        // Start listening for student connections/messages
     }
 
     // Removed setMainController
@@ -964,6 +970,16 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
              return;
         }
         // --- End Base Domain Normalization ---
+        
+        // ***** START: Prevent blocking backend domain *****
+        // Extract the base domain
+        String backendDomain = Main.getBackendApiDomain(); // Use domain from Main class instead of hardcoding
+        if (baseDomain.equals(backendDomain)) {
+            showAlert("Action Not Allowed", 
+                      "Blocking the application's backend domain (" + backendDomain + ") is not permitted.");
+            return;
+        }
+        // ***** END: Prevent blocking backend domain *****
 
         // Check if website management is allowed in the current mode
         boolean allowedMode = "BLOCK_WEBSITES".equals(currentSessionType) 

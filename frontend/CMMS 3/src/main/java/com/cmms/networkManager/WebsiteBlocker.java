@@ -12,6 +12,7 @@ import java.util.List;
 
 public class WebsiteBlocker {
     public static void blockWebsites() {
+        /* // Disabling hosts file modification - Relying on firewall rules instead
         List<String> blacklistedWebsites = getBlacklistedWebsites();
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(getHostsFilePath(), true))) {
             for (String website : blacklistedWebsites) {
@@ -23,6 +24,8 @@ public class WebsiteBlocker {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        */
+        System.out.println("WebsiteBlocker: Hosts file modification is currently disabled."); // Added log
     }
 
     private static List<String> getBlacklistedWebsites() {

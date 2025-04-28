@@ -23,14 +23,13 @@ public class StudentManager {
 //        new Thread(() -> TaskManagement.monitorApps(sessionCode, studentPcId)).start();
 
         // Start monitoring USB devices
-        new Thread(() -> DriverManager.monitorUSB(
+        new Thread(() -> DriverManager.startMonitoring(
                 sessionCode,
                 studentPcId,
                 studentName,
                 className,
                 rollNo
         )).start();
- new Thread(()->     NetworkManagerWin.enableInternetRestrictions(sessionCode, studentPcId)).start();
         // Block websites
 //        WebsiteBlocker.blockWebsites();
     }

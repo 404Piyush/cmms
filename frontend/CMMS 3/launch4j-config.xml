@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch4jConfig>
+  <dontWrapJar>false</dontWrapJar>
+  <headerType>gui</headerType>
+  <jar>target\CMMS-1.0.0.jar</jar>
+  <outfile>CMMS_App.exe</outfile>
+  <errTitle>CMMS Startup Error</errTitle>
+  <cmdLine></cmdLine>
+  <chdir>.</chdir>
+  <priority>normal</priority>
+  <downloadUrl></downloadUrl>
+  <supportUrl></supportUrl>
+  <stayAlive>false</stayAlive>
+  <restartOnCrash>false</restartOnCrash>
+  <manifest></manifest>
+  <icon>C:\Users\piyus\Downloads\logo.ico</icon>
+  <singleInstance>
+    <mutexName>CMMS_App_Mutex</mutexName>
+    <windowTitle>CMMS</windowTitle>
+  </singleInstance>
+  <classPath>
+    <mainClass>com.cmms.Launcher</mainClass>
+  </classPath>
+  <jre>
+    <path>%JAVA_HOME%;%PATH%</path>
+    <requiresJdk>false</requiresJdk>
+    <requires64Bit>true</requires64Bit>
+    <minVersion>17</minVersion>
+    <maxVersion></maxVersion>
+  </jre>
+  <versionInfo>
+    <fileVersion>1.0.0.0</fileVersion>
+    <txtFileVersion>1.0.0</txtFileVersion>
+    <fileDescription>Classroom Monitor &amp; Management System</fileDescription>
+    <copyright>Your Company/Name</copyright>
+    <productVersion>1.0.0.0</productVersion>
+    <txtProductVersion>1.0.0</txtProductVersion>
+    <productName>CMMS</productName>
+    <companyName>Your Company/Name</companyName>
+    <internalName>CMMS</internalName>
+    <originalFilename>CMMS_App.exe</originalFilename>
+    <trademarks></trademarks>
+    <language>ENGLISH_US</language>
+  </versionInfo>
+  <messages>
+    <startupErr>An error occurred while starting the application.</startupErr>
+    <jreNotFoundErr>This application requires a Java Runtime Environment (JRE) version 17 or later (64-bit).</jreNotFoundErr>
+    <jreVersionErr>This application requires a Java Runtime Environment (JRE) version 17 or later (64-bit). Please update your JRE.</jreVersionErr>
+    <launcherErr>The registry refers to a nonexistent JRE installation or the runtime is corrupted.</launcherErr>
+    <instanceAlreadyExistsMsg>An instance of the application is already running.</instanceAlreadyExistsMsg>
+  </messages>
+</launch4jConfig>

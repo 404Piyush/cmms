@@ -6,10 +6,12 @@ import com.cmms.dto.SessionSettings;
 import com.cmms.dto.WebSocketMessage;
 import com.cmms.service.ApiService;
 import com.cmms.service.WebSocketService;
-// Placeholder imports for enforcement services - Replace with actual classes later
+// Updated imports
 import com.cmms.taskManager.AppMonitorService; 
-import com.cmms.networkManager.WebsiteMonitorService;
-import com.cmms.driverManager.UsbMonitorService;
+// import com.cmms.networkManager.WebsiteMonitorService; // REMOVED
+// import com.cmms.driverManager.UsbMonitorService; // REMOVED
+import com.cmms.networkManager.NetworkManagerWin; // ADDED
+import com.cmms.driverManager.DriverManager; // ADDED
 
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -21,6 +23,7 @@ import javafx.scene.control.TextArea;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.ArrayList; // For empty list creation
 
 /**
  * Controller for the Student Monitoring screen.
@@ -37,17 +40,20 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
     private ApiService apiService; // Might not be needed here, but injected
     private WebSocketService webSocketService;
 
-    // Instance variables to hold session data (instead of relying on static gets)
+    // Instance variables to hold session data
     private SessionSettings currentSettings;
     private String authToken;
     private String sessionCode;
     private String studentId;
-    private String studentName; // If needed for display
+    private String studentName; 
+    private String studentClass; // Added to hold class info
+    private String studentRollNo; // Added to hold roll number
 
-    // Enforcement service instances (to be implemented)
+    // Enforcement service instances
     private AppMonitorService appMonitorService;
-    private WebsiteMonitorService websiteMonitorService;
-    private UsbMonitorService usbMonitorService;
+    // private WebsiteMonitorService websiteMonitorService; // REMOVED
+    // private UsbMonitorService usbMonitorService; // REMOVED
+    // No instance needed for static NetworkManagerWin or DriverManager
 
     private boolean isCleanupDone = false;
     private boolean isInitialized = false; // Flag to prevent double init
@@ -63,13 +69,15 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
         this.webSocketService.addListener(this); // Register for WS messages
     }
 
-    // New method to explicitly set session data AFTER controller is loaded
-    public void setSessionData(String authToken, SessionSettings settings, String sessionCode, String studentId, String studentName) {
+    // Updated method to receive more student details
+    public void setSessionData(String authToken, SessionSettings settings, String sessionCode, String studentId, String studentName, String studentClass, String studentRollNo) {
         this.authToken = authToken;
         this.currentSettings = settings;
         this.sessionCode = sessionCode;
         this.studentId = studentId;
-        this.studentName = studentName; // Store if needed
+        this.studentName = studentName; 
+        this.studentClass = studentClass; // Store class
+        this.studentRollNo = studentRollNo; // Store roll number
         
         // Now that data is set, proceed with initialization that depends on it
         initializeMonitor(); 
@@ -77,90 +85,126 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
 
     @FXML
     public void initialize() {
-        // Basic FXML initialization only (e.g., setting styles)
         logInfo("Initializing Student Monitor UI components...");
         connectionStatusLabel.setText("Status: Initializing...");
-        // DO NOT retrieve static data here anymore
     }
 
-    // Renamed original initialize logic, called by setSessionData
     private void initializeMonitor() {
-        if (isInitialized) return; // Prevent running twice
+        if (isInitialized) return; 
         isInitialized = true;
         
         logInfo("Configuring Student Monitor with session data...");
 
         // Check if data was set correctly via setSessionData
-        if (currentSettings == null || authToken == null || sessionCode == null || studentId == null) {
-            logError("Critical error: Session data was not provided to the monitor controller.");
+        // Added checks for new fields
+        if (currentSettings == null || authToken == null || sessionCode == null || studentId == null || studentName == null || studentClass == null || studentRollNo == null) {
+            logError("Critical error: Session data was not fully provided to the monitor controller.");
             connectionStatusLabel.setText("Status: Error - Missing session data");
-            Main.showError("Initialization Error", "Could not retrieve session details. Please restart the join process.");
+            Main.showError("Initialization Error", "Could not retrieve complete session details. Please restart the join process.");
             disconnectButton.setDisable(true);
             return;
         }
 
-        // Update UI labels with instance data
+        // Update UI labels
         sessionCodeLabel.setText("Session: " + this.sessionCode);
         studentIdLabel.setText("Your ID: " + this.studentId);
         logInfo("Session Type: " + this.currentSettings.getSessionType());
         logInfo("USB Blocking: " + this.currentSettings.isBlockUsb());
-        logInfo("Website Blacklist: " + this.currentSettings.getWebsiteBlacklist());
         logInfo("Website Whitelist: " + this.currentSettings.getWebsiteWhitelist());
 
-        // Instantiate enforcement services 
+        // Instantiate necessary services
         appMonitorService = new AppMonitorService(webSocketService, this.studentId);
-        websiteMonitorService = new WebsiteMonitorService(webSocketService, this.studentId);
-        usbMonitorService = new UsbMonitorService(webSocketService, this.studentId);
+        // websiteMonitorService = new WebsiteMonitorService(webSocketService, this.studentId); // REMOVED
+        // usbMonitorService = new UsbMonitorService(webSocketService, this.studentId); // REMOVED
 
         // Connect to WebSocket
         connectionStatusLabel.setText("Status: Connecting...");
         webSocketService.connectAndAuthenticate(this.authToken);
+
+        initializeServices();
+    }
+
+    private void initializeServices() {
+        logInfo("Initializing monitoring services...");
+        try {
+            // Initialize any needed monitoring services here
+            
+            // Make sure critical services like Cursor can stay connected
+            // NetworkManagerWin.whitelistCriticalServices(); // Ensure critical services are allowed
+            
+            // Start monitoring based on the current settings
+            updateEnforcementServicesCompared(null, false, this.currentSettings);
+        } catch (Exception e) {
+            String errorMsg = "Error initializing services: " + e.getMessage();
+            logError(errorMsg);
+            e.printStackTrace();
+        }
     }
 
     private void startEnforcement(SessionSettings settings) {
         logInfo("Starting enforcement based on initial settings...");
         this.currentSettings = settings; // Update local settings copy
 
-        // Start App Monitoring (always active, gets blacklist via WS)
-        // TODO: Pass initial app blacklist if available in settings
-        appMonitorService.startMonitoring(settings.getAppBlacklist()); 
+        // Start App Monitoring
+        List<String> appBlacklist = settings.getAppBlacklist() != null ? settings.getAppBlacklist() : new ArrayList<>();
+        appMonitorService.startMonitoring(appBlacklist);
         logInfo("App monitoring started.");
 
-        // Start Website Monitoring based on type
-        websiteMonitorService.startMonitoring(settings.getSessionType(), 
-                                            settings.getWebsiteBlacklist(), 
-                                            settings.getWebsiteWhitelist());
-        logInfo("Website monitoring started (Mode: " + settings.getSessionType() + ").");
-
-        // Start USB Monitoring if enabled
-        if (settings.isBlockUsb()) {
-            usbMonitorService.startMonitoring(true);
-            logInfo("USB monitoring started (Blocking Enabled).");
+        // Start Website Blocking (Firewall)
+        if ("ALLOW_WEBSITES".equalsIgnoreCase(settings.getSessionType())) {
+            List<String> whitelist = settings.getWebsiteWhitelist() != null ? settings.getWebsiteWhitelist() : new ArrayList<>();
+            logInfo("Enabling network restrictions (Firewall - Allow Mode). Whitelist: " + whitelist);
+            // Run in background thread to avoid blocking UI
+            new Thread(() -> NetworkManagerWin.enableInternetRestrictions(this.sessionCode, whitelist)).start();
         } else {
-            usbMonitorService.startMonitoring(false); // Start in non-blocking mode to detect attempts
-             logInfo("USB monitoring started (Blocking Disabled - Reporting only).");
+            logInfo("Network restrictions (Firewall) not enabled for mode: " + settings.getSessionType());
+             // Ensure any previous rules are disabled if mode changes from ALLOW_WEBSITES
+            new Thread(() -> NetworkManagerWin.disableInternetRestrictions(this.sessionCode)).start();
+        }
+
+        // Start USB Monitoring (PnP)
+        if (settings.isBlockUsb()) {
+            logInfo("USB monitoring (PnP) starting (Blocking Enabled)... Session: " + this.sessionCode + ", PC: " + this.studentId);
+             // Start in a new thread as it contains an indefinite loop
+            new Thread(() -> DriverManager.startMonitoring(
+                    this.sessionCode, 
+                    this.studentId, 
+                    this.studentName, // Pass necessary details
+                    this.studentClass,
+                    this.studentRollNo
+            ), "DriverManager-Monitor").start(); // Give thread a name
+        } else {
+            logInfo("USB monitoring (PnP) is disabled by session settings.");
+            // Ensure any previous PnP monitoring is stopped
+            DriverManager.stopMonitoring();
         }
         
         isCleanupDone = false; // Reset cleanup flag
     }
 
     private void stopEnforcementAndCleanup() {
-        if(isCleanupDone) return; // Prevent double cleanup
+        if(isCleanupDone) return;
+        isCleanupDone = true; // Set flag early
         
         logInfo("Stopping enforcement and performing cleanup...");
+        
+        // Stop App Monitor
         if (appMonitorService != null) {
             appMonitorService.stopMonitoring();
             logInfo("App monitoring stopped.");
         }
-        if (websiteMonitorService != null) {
-            websiteMonitorService.stopMonitoring();
-            logInfo("Website monitoring stopped & hosts file reverted.");
-        }
-        if (usbMonitorService != null) {
-            usbMonitorService.stopMonitoring();
-            logInfo("USB monitoring stopped & blocking reverted.");
-        }
-        isCleanupDone = true;
+        
+        // Disable Firewall Rules
+        logInfo("Disabling network restrictions (Firewall)... Session: " + this.sessionCode);
+        // Run in background thread
+        new Thread(() -> NetworkManagerWin.disableInternetRestrictions(this.sessionCode)).start();
+        
+        // Stop USB Monitor (PnP) and Re-enable Devices
+        logInfo("Stopping USB monitoring (PnP) and re-enabling devices...");
+        // This call now handles re-enabling within it
+        DriverManager.stopMonitoring(); 
+        logInfo("USB monitoring (PnP) stopped.");
+        
     }
 
     @FXML
@@ -176,7 +220,6 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
     }
 
     // --- WebSocketListener Implementation ---
-
     @Override
     public void onWebSocketOpen() {
         Platform.runLater(() -> {
@@ -191,26 +234,20 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
             logInfo("WS Received: Type=" + message.getType());
 
             switch (message.getType()) {
-                 case "response": // Handle responses like successful authentication
-                    // Check if the payload indicates successful authentication
+                 case "response": 
                     if (message.getPayload() != null && 
                         message.getPayload().containsKey("message") &&
                         String.valueOf(message.getPayload().get("message")).toLowerCase().contains("authentication successful")) {
-                            
                         logInfo("WebSocket Authenticated successfully by server.");
                         connectionStatusLabel.setText("Status: Connected & Authenticated");
-                        // Now that authentication is confirmed, start enforcement
-                        // Make sure currentSettings are available (should be from REST call)
                         if(this.currentSettings != null) {
-                            startEnforcement(this.currentSettings);
+                            startEnforcement(this.currentSettings); // Start enforcement AFTER auth
                         } else {
                             logError("Cannot start enforcement: Initial settings missing after authentication.");
-                            // Request settings again? Or disconnect?
                         }
                     } else if ("error".equalsIgnoreCase(message.getStatus())) {
                           logError("WS Error Response: " + message.getPayload());
                      } else {
-                         // Log other non-auth success responses if needed
                          logInfo("WS Response: " + message.getPayload());
                      }
                     break;
@@ -220,12 +257,11 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
                      if (message.getPayload() != null) {
                          try {
                             SessionSettings initialSettings = parseSettingsFromPayload(message.getPayload());
-                            // Apply settings, but DON'T start enforcement here, wait for auth confirmation
-                            this.currentSettings = initialSettings; // Update local copy
+                            this.currentSettings = initialSettings; 
                             logInfo("Initial settings applied locally.");
-                            // If already authenticated, re-apply/update enforcement
+                            // If already authenticated, update enforcement immediately
                             if (connectionStatusLabel.getText().contains("Authenticated")) {
-                                logInfo("Re-applying enforcement based on initial_settings received after auth.");
+                                logInfo("Applying initial_settings received after auth.");
                                 updateEnforcementServices(initialSettings);
                             }
                          } catch (Exception e) {
@@ -239,9 +275,15 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
                     if (message.getPayload() != null) {
                          try {
                             SessionSettings updatedSettings = parseSettingsFromPayload(message.getPayload());
+                            // Store the *previous* settings before updating
+                            boolean wasUsbBlocked = this.currentSettings.isBlockUsb();
+                            String previousSessionType = this.currentSettings.getSessionType();
+                            
                             updateLocalSettings(updatedSettings); // Update internal state
                             logInfo("Applying updated server settings to enforcement...");
-                            updateEnforcementServices(this.currentSettings); // Apply changes to services
+                            
+                            // Compare previous and new settings to apply changes correctly
+                            updateEnforcementServicesCompared(previousSessionType, wasUsbBlocked, this.currentSettings);
                          } catch (Exception e) {
                              logError("Failed to parse settings_update payload: " + e.getMessage());
                          }
@@ -313,25 +355,68 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
         });
     }
 
-    // Extracted logic to update enforcement services based on current settings
+    // Renamed old update method
     private void updateEnforcementServices(SessionSettings settings) {
-        if (settings == null) {
-            logError("Cannot update enforcement: Settings are null.");
+        // This method is now less ideal as it doesn't know previous state.
+        // Call the new comparative method instead.
+        logWarn("Deprecated updateEnforcementServices called. Use comparative version.");
+        updateEnforcementServicesCompared(null, !settings.isBlockUsb(), settings); // Guess previous state
+    }
+
+    // New method to handle updates by comparing old and new states
+    private void updateEnforcementServicesCompared(String previousSessionType, boolean wasUsbBlocked, SessionSettings newSettings) {
+        if (newSettings == null) {
+            logError("Cannot update enforcement: New settings are null.");
             return;
         }
-        logInfo("Updating enforcement services...");
+        logInfo("Comparing and updating enforcement services...");
+        
+        // Update App Monitor (always updates list)
         if (appMonitorService != null) {
-            appMonitorService.updateAppBlacklist(settings.getAppBlacklist() != null ? settings.getAppBlacklist() : List.of());
+            appMonitorService.updateAppBlacklist(newSettings.getAppBlacklist() != null ? newSettings.getAppBlacklist() : new ArrayList<>());
         }
-        if (websiteMonitorService != null) {
-            websiteMonitorService.updateMonitoringMode(settings.getSessionType(),
-                                                   settings.getWebsiteBlacklist() != null ? settings.getWebsiteBlacklist() : List.of(),
-                                                   settings.getWebsiteWhitelist() != null ? settings.getWebsiteWhitelist() : List.of());
-        }
-        if (usbMonitorService != null) {
-            usbMonitorService.updateBlockingState(settings.isBlockUsb());
-        }
-        logInfo("Enforcement services updated.");
+
+        // Update Network Restrictions (Firewall)
+        String newSessionType = newSettings.getSessionType();
+        boolean needsFirewall = "ALLOW_WEBSITES".equalsIgnoreCase(newSessionType);
+        boolean neededFirewall = "ALLOW_WEBSITES".equalsIgnoreCase(previousSessionType);
+        
+        if (needsFirewall && !neededFirewall) {
+            // Switched TO Allow mode: Enable firewall
+            List<String> whitelist = newSettings.getWebsiteWhitelist() != null ? newSettings.getWebsiteWhitelist() : new ArrayList<>();
+            logInfo("Settings Update: Enabling network restrictions (Firewall - Allow Mode). Whitelist: " + whitelist);
+            new Thread(() -> NetworkManagerWin.enableInternetRestrictions(this.sessionCode, whitelist)).start();
+        } else if (!needsFirewall && neededFirewall) {
+            // Switched FROM Allow mode: Disable firewall
+            logInfo("Settings Update: Disabling network restrictions (Firewall) as mode changed from ALLOW_WEBSITES.");
+            new Thread(() -> NetworkManagerWin.disableInternetRestrictions(this.sessionCode)).start();
+        } else if (needsFirewall && neededFirewall) {
+            // Still in Allow mode, maybe whitelist changed?
+             List<String> whitelist = newSettings.getWebsiteWhitelist() != null ? newSettings.getWebsiteWhitelist() : new ArrayList<>();
+             logInfo("Settings Update: Re-applying network restrictions (Firewall - Allow Mode) for updated whitelist: " + whitelist);
+             // Re-applying involves disabling first, then enabling with new list
+             new Thread(() -> {
+                 NetworkManagerWin.disableInternetRestrictions(this.sessionCode);
+                 NetworkManagerWin.enableInternetRestrictions(this.sessionCode, whitelist);
+             }).start();
+        } // else: !needsFirewall && !neededFirewall -> Do nothing firewall-wise
+
+        // Update USB Monitoring (PnP)
+        boolean shouldBlockUsb = newSettings.isBlockUsb();
+        if (shouldBlockUsb && !wasUsbBlocked) {
+            // USB blocking was OFF, now turned ON
+            logInfo("Settings Update: Starting USB monitoring (PnP) - Blocking Enabled.");
+             new Thread(() -> DriverManager.startMonitoring(
+                    this.sessionCode, this.studentId, this.studentName, 
+                    this.studentClass, this.studentRollNo
+             ), "DriverManager-Monitor-Update").start();
+        } else if (!shouldBlockUsb && wasUsbBlocked) {
+            // USB blocking was ON, now turned OFF
+            logInfo("Settings Update: Stopping USB monitoring (PnP) - Blocking Disabled.");
+            DriverManager.stopMonitoring();
+        } // else: state didn't change, do nothing to USB monitoring
+
+        logInfo("Enforcement services update process finished.");
     }
 
     // Helper to parse settings from a payload Map (used by initial_settings & settings_update)

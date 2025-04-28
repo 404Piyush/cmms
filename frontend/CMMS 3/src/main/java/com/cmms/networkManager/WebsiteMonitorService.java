@@ -1,5 +1,6 @@
 package com.cmms.networkManager;
 
+import com.cmms.Main;
 import com.cmms.service.WebSocketService;
 
 import java.io.BufferedReader;
@@ -33,7 +34,6 @@ public class WebsiteMonitorService {
     private final Object hostsFileLock = new Object(); // Lock for file access
 
     // TODO: Derive backend host from API URL if possible/needed
-    private static final String BACKEND_HOST = "localhost"; 
     private static final Path HOSTS_FILE_PATH = Paths.get("C:", "Windows", "System32", "drivers", "etc", "hosts");
     private static final String REDIRECT_IP_V4 = "127.0.0.1";
     private static final String REDIRECT_IP_V6 = "::1"; // Added IPv6 loopback
@@ -114,17 +114,29 @@ public class WebsiteMonitorService {
                 // Remove www. prefix if it exists for the base domain check
                 String baseSite = normalizedSite.startsWith("www.") ? normalizedSite.substring(4) : normalizedSite;
                 
+                // Get backend domains dynamically
+                String apiDomain = Main.getBackendApiDomain();
+                String wsDomain = Main.getBackendWebSocketDomain();
+
                 // Always block the base domain (e.g., youtube.com)
-                if (!baseSite.equals(BACKEND_HOST)) {
+                // Check against both API and WebSocket domains
+                boolean isBackendBase = (apiDomain != null && baseSite.equalsIgnoreCase(apiDomain)) || 
+                                        (wsDomain != null && baseSite.equalsIgnoreCase(wsDomain));
+                                        
+                if (!isBackendBase) {
                     hostsEntriesToAdd.add(REDIRECT_IP_V4 + " " + baseSite + " # CMMS Blocked");
                     hostsEntriesToAdd.add(REDIRECT_IP_V6 + " " + baseSite + " # CMMS Blocked");
                 } else {
-                     System.out.println("  -> Skipping block for backend host: " + baseSite);
+                     System.out.println("  -> Skipping block for backend host (base): " + baseSite);
                 }
                 
                 // Always block the www. version (e.g., www.youtube.com)
                 String wwwSite = "www." + baseSite;
-                 if (!wwwSite.equals(BACKEND_HOST)) { // Check www version against backend host too
+                 // Check www version against backend host too
+                 boolean isBackendWww = (apiDomain != null && wwwSite.equalsIgnoreCase(apiDomain)) ||
+                                       (wsDomain != null && wwwSite.equalsIgnoreCase(wsDomain));
+
+                 if (!isBackendWww) { 
                     hostsEntriesToAdd.add(REDIRECT_IP_V4 + " " + wwwSite + " # CMMS Blocked");
                     hostsEntriesToAdd.add(REDIRECT_IP_V6 + " " + wwwSite + " # CMMS Blocked");
                  } else {

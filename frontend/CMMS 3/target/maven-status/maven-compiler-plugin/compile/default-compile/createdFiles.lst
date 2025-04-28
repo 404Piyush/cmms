@@ -3,6 +3,8 @@ com\cmms\ui\TeacherConfigController.class
 com\cmms\session\SessionManager.class
 com\cmms\service\ApiService$3.class
 com\cmms\utils\MongoDBHelper.class
+com\cmms\TestNetworkManager.class
+com\cmms\networkManager\FirewallManager.class
 com\cmms\service\WebSocketService$WebSocketListener.class
 com\cmms\ui\RoleSelectionController.class
 com\cmms\driverManager\DriverManager.class
@@ -17,6 +19,7 @@ com\cmms\admin\ConnectionListener.class
 com\cmms\dto\SessionSettings.class
 com\cmms\ui\StudentInfo.class
 com\cmms\driverManager\UsbMonitorService$StreamGobbler.class
+com\cmms\networkManager\NetworkManager.class
 com\cmms\driverManager\UsbMonitorService.class
 com\cmms\ui\StudentJoinController$1.class
 com\cmms\ServiceAwareController.class
@@ -27,6 +30,7 @@ com\cmms\taskManager\TaskManagement.class
 com\cmms\ui\StudentJoinController.class
 com\cmms\ui\TeacherDashboardController$1.class
 com\cmms\taskManager\win\AsyncManager.class
+com\cmms\ui\TeacherDashboardController$5.class
 com\cmms\service\ApiService$2.class
 com\cmms\ui\TeacherDashboardController$4.class
 com\cmms\networkManager\WebsiteBlocker.class
@@ -35,7 +39,9 @@ com\cmms\student\StudentManager.class
 com\cmms\service\WebSocketService$SimpleWebSocketClient.class
 com\cmms\ui\StudentDetailController.class
 com\cmms\service\ApiService.class
+com\cmms\service\ApiService$4.class
 com\cmms\taskManager\AppMonitorService.class
+com\cmms\Launcher.class
 com\cmms\networkManager\WebsiteMonitorService.class
 com\cmms\ui\TeacherDashboardController.class
 com\cmms\service\ApiService$ApiException.class

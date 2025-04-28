@@ -3,9 +3,11 @@ node_modules
 
 # Environment variables
 .env
-.frontend
+# .frontend # Commented out - might be a typo, use frontend/ if needed
+
 # Logs
 logs.txt
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -17,4 +19,26 @@ yarn-error.log*
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.exe
+*.zip
+dependency-reduced-pom.xml
+pom.properties
+createdFiles.lst
+inputFiles.lst
+
+# IDE files (optional)
+.idea/
+*.iml
+.vscode/
+
+# Frontend specific build/dist folders (if applicable, uncomment/adjust)
+# frontend/dist/
+# frontend/build/
 

@@ -7,7 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const jwt = require('jsonwebtoken');
 const MongoDBHelper = require('../utils/MongoDBHelper');
-const { getWebSocketSessions } = require('../server'); // Import the getter function
+const sessionStore = require('../utils/sessionStore'); // Import session store instead of from server
 
 /**
  * Generates a random session code.
@@ -57,39 +57,39 @@ exports.createSession = async (req, res) => {
         const sessionCollection = MongoDBHelper.getCollection("sessions");
 
         const newSession = {
-            session_code: sessionCode,
+      session_code: sessionCode,
             admin_pc: adminPc,
             createdAt: new Date(),
-            isSessionOn: true,
+      isSessionOn: true,
             sessionType: sessionType, // Store session type
             blockUsb: Boolean(blockUsb), // Store USB blocking preference
             websiteBlacklist: [], // Initialize website lists
             websiteWhitelist: [], // Initialize website lists
-            studentCount: 0,
+      studentCount: 0,
             blacklisted_apps: 0, // This count might need adjustment based on how apps are stored later
-        };
+    };
 
         const result = await sessionCollection.insertOne(newSession);
         if (!result.insertedId) {
             throw new Error("Failed to insert session into database.");
         }
-
+    
         const token = generateTeacherToken(sessionCode, adminPc);
-
+    
         console.log(`Session created: ${sessionCode} by ${adminPc}`);
-        res.status(201).json({
+    res.status(201).json({
             message: "Session created successfully",
             sessionCode: sessionCode,
             adminPc: adminPc,
             token: token // Send token for the teacher to authenticate WebSocket
-        });
-    } catch (error) {
-        console.error("Error creating session:", error);
+    });
+  } catch (error) {
+    console.error("Error creating session:", error);
         if (error.message.includes("duplicate key")) { 
              return res.status(409).json({ message: "Failed to create session. Potential session code collision. Please try again." });
         }
         res.status(500).json({ message: "Internal server error" });
-    }
+  }
 };
 
 /**
@@ -128,7 +128,7 @@ exports.endSession = async (req, res) => {
 
         // --- Notify Students and Gather Summary Data --- 
         let studentCount = 0;
-        const allSessions = getWebSocketSessions(); // Call the getter function
+        const allSessions = sessionStore.getAllSessions(); // Call the getter function
         const sessionConnections = allSessions[code]; // Get WS connections for this session
 
         if (sessionConnections && sessionConnections.students) {
@@ -162,7 +162,7 @@ exports.endSession = async (req, res) => {
         }
         
         // Clean up the in-memory session entry
-        delete allSessions[code]; // Delete from the map obtained via getter
+        sessionStore.removeSession(code); // Delete from the map obtained via getter
         console.log(`Removed in-memory WebSocket session entry for ${code}.`);
         // --- End Notification and WS Cleanup --- 
 
@@ -195,7 +195,7 @@ exports.endSession = async (req, res) => {
     } catch (error) {
         console.error("Error ending session:", error);
         res.status(500).json({ message: "Internal server error" });
-    }
+}
 };
 
 function logEvent(message) {

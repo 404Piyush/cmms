@@ -105,7 +105,8 @@ public class StudentJoinController implements ServiceAwareController {
 
                 Platform.runLater(() -> {
                     try {
-                        Main.loadStudentMonitorView(authToken, settings, sessionCode, studentId, studentName);
+                        Main.loadStudentMonitorView(authToken, settings, sessionCode, studentId, 
+                                                    studentName, studentClass, rollNo);
                     } catch (Exception e) {
                         System.err.println("Error loading student monitor view: " + e.getMessage());
                         e.printStackTrace();
