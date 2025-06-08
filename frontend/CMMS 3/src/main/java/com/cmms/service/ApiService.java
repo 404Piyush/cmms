@@ -283,11 +283,12 @@ public class ApiService {
     // --- Token Management (Optional) ---
     public void clearTeacherToken() {
         this.teacherAuthToken = null;
+        System.out.println("Cleared teacher token.");
     }
 
-     // Added getter needed by TeacherDashboardController
+     // Getter for the teacher token
      public String getTeacherAuthToken() {
-        return teacherAuthToken;
+         return teacherAuthToken;
      }
 
      // Potentially add method to set token if needed elsewhere

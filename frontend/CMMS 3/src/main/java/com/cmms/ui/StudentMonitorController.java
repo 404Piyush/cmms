@@ -8,10 +8,11 @@ import com.cmms.service.ApiService;
 import com.cmms.service.WebSocketService;
 // Updated imports
 import com.cmms.taskManager.AppMonitorService; 
-// import com.cmms.networkManager.WebsiteMonitorService; // REMOVED
+import com.cmms.networkManager.WebsiteMonitorService; // <-- UNCOMMENTED
 // import com.cmms.driverManager.UsbMonitorService; // REMOVED
-import com.cmms.networkManager.NetworkManagerWin; // ADDED
+import com.cmms.networkManager.NetworkManagerWin; // COMMENTED OUT
 import com.cmms.driverManager.DriverManager; // ADDED
+import com.cmms.logging.SessionLoggerService; // Import logger service
 
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -39,6 +40,7 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
 
     private ApiService apiService; // Might not be needed here, but injected
     private WebSocketService webSocketService;
+    private SessionLoggerService sessionLoggerService; // Keep instance if needed later
 
     // Instance variables to hold session data
     private SessionSettings currentSettings;
@@ -51,8 +53,8 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
 
     // Enforcement service instances
     private AppMonitorService appMonitorService;
-    // private WebsiteMonitorService websiteMonitorService; // REMOVED
-    // private UsbMonitorService usbMonitorService; // REMOVED
+    private WebsiteMonitorService websiteMonitorService; // <-- ADDED
+    // private UsbMonitorService usbMonitorService; // REMOVED (Keep removed if DriverManager handles it)
     // No instance needed for static NetworkManagerWin or DriverManager
 
     private boolean isCleanupDone = false;
@@ -66,7 +68,17 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
     @Override
     public void setWebSocketService(WebSocketService webSocketService) {
         this.webSocketService = webSocketService;
-        this.webSocketService.addListener(this); // Register for WS messages
+        if (this.webSocketService != null) {
+            this.webSocketService.addListener(this);
+        }
+    }
+
+    // Implement required method from ServiceAwareController
+    @Override
+    public void setSessionLoggerService(SessionLoggerService sessionLoggerService) {
+        this.sessionLoggerService = sessionLoggerService;
+        // We *could* use this logger service here for student-side logging if desired
+        // logInfo("SessionLoggerService injected into Student Monitor.");
     }
 
     // Updated method to receive more student details
@@ -114,7 +126,7 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
 
         // Instantiate necessary services
         appMonitorService = new AppMonitorService(webSocketService, this.studentId);
-        // websiteMonitorService = new WebsiteMonitorService(webSocketService, this.studentId); // REMOVED
+        websiteMonitorService = new WebsiteMonitorService(webSocketService, this.studentId); // <-- ADDED Instantiation
         // usbMonitorService = new UsbMonitorService(webSocketService, this.studentId); // REMOVED
 
         // Connect to WebSocket
@@ -150,17 +162,15 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
         appMonitorService.startMonitoring(appBlacklist);
         logInfo("App monitoring started.");
 
-        // Start Website Blocking (Firewall)
-        if ("ALLOW_WEBSITES".equalsIgnoreCase(settings.getSessionType())) {
-            List<String> whitelist = settings.getWebsiteWhitelist() != null ? settings.getWebsiteWhitelist() : new ArrayList<>();
-            logInfo("Enabling network restrictions (Firewall - Allow Mode). Whitelist: " + whitelist);
-            // Run in background thread to avoid blocking UI
-            new Thread(() -> NetworkManagerWin.enableInternetRestrictions(this.sessionCode, whitelist)).start();
-        } else {
-            logInfo("Network restrictions (Firewall) not enabled for mode: " + settings.getSessionType());
-             // Ensure any previous rules are disabled if mode changes from ALLOW_WEBSITES
-            new Thread(() -> NetworkManagerWin.disableInternetRestrictions(this.sessionCode)).start();
-        }
+        // Start Website Monitoring (using WebsiteMonitorService)
+        if (websiteMonitorService != null) { // <-- ADDED Check
+             logInfo("Starting initial website monitoring (Hosts File)...");
+             websiteMonitorService.startMonitoring(
+                settings.getSessionType(),
+                settings.getWebsiteBlacklist() != null ? settings.getWebsiteBlacklist() : new ArrayList<>(),
+                settings.getWebsiteWhitelist() != null ? settings.getWebsiteWhitelist() : new ArrayList<>()
+             ); // <-- ADDED Call
+        } // <-- ADDED Check
 
         // Start USB Monitoring (PnP)
         if (settings.isBlockUsb()) {
@@ -195,9 +205,14 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
         }
         
         // Disable Firewall Rules
-        logInfo("Disabling network restrictions (Firewall)... Session: " + this.sessionCode);
-        // Run in background thread
-        new Thread(() -> NetworkManagerWin.disableInternetRestrictions(this.sessionCode)).start();
+        logInfo("Disabling network restrictions (Hosts File & Firewall)... Session: " + this.sessionCode); // <-- UPDATED Log Message
+        // Remove firewall call:
+        // new Thread(() -> NetworkManagerWin.disableInternetRestrictions(this.sessionCode)).start(); // <-- COMMENTED OUT
+        // Stop Website Monitor (reverts hosts file)
+        if (websiteMonitorService != null) { // <-- ADDED
+            websiteMonitorService.stopMonitoring(); // <-- ADDED
+            logInfo("Website monitoring stopped (Hosts file reverted)."); // <-- ADDED
+        } // <-- ADDED
         
         // Stop USB Monitor (PnP) and Re-enable Devices
         logInfo("Stopping USB monitoring (PnP) and re-enabling devices...");
@@ -376,30 +391,15 @@ public class StudentMonitorController implements ServiceAwareController, WebSock
             appMonitorService.updateAppBlacklist(newSettings.getAppBlacklist() != null ? newSettings.getAppBlacklist() : new ArrayList<>());
         }
 
-        // Update Network Restrictions (Firewall)
-        String newSessionType = newSettings.getSessionType();
-        boolean needsFirewall = "ALLOW_WEBSITES".equalsIgnoreCase(newSessionType);
-        boolean neededFirewall = "ALLOW_WEBSITES".equalsIgnoreCase(previousSessionType);
-        
-        if (needsFirewall && !neededFirewall) {
-            // Switched TO Allow mode: Enable firewall
-            List<String> whitelist = newSettings.getWebsiteWhitelist() != null ? newSettings.getWebsiteWhitelist() : new ArrayList<>();
-            logInfo("Settings Update: Enabling network restrictions (Firewall - Allow Mode). Whitelist: " + whitelist);
-            new Thread(() -> NetworkManagerWin.enableInternetRestrictions(this.sessionCode, whitelist)).start();
-        } else if (!needsFirewall && neededFirewall) {
-            // Switched FROM Allow mode: Disable firewall
-            logInfo("Settings Update: Disabling network restrictions (Firewall) as mode changed from ALLOW_WEBSITES.");
-            new Thread(() -> NetworkManagerWin.disableInternetRestrictions(this.sessionCode)).start();
-        } else if (needsFirewall && neededFirewall) {
-            // Still in Allow mode, maybe whitelist changed?
-             List<String> whitelist = newSettings.getWebsiteWhitelist() != null ? newSettings.getWebsiteWhitelist() : new ArrayList<>();
-             logInfo("Settings Update: Re-applying network restrictions (Firewall - Allow Mode) for updated whitelist: " + whitelist);
-             // Re-applying involves disabling first, then enabling with new list
-             new Thread(() -> {
-                 NetworkManagerWin.disableInternetRestrictions(this.sessionCode);
-                 NetworkManagerWin.enableInternetRestrictions(this.sessionCode, whitelist);
-             }).start();
-        } // else: !needsFirewall && !neededFirewall -> Do nothing firewall-wise
+        // Update Website Monitor (Hosts File)
+        if (websiteMonitorService != null) { // <-- ADDED Check
+            logInfo("Settings Update: Updating website monitoring (Hosts File)...");
+            websiteMonitorService.updateMonitoringMode(
+                newSettings.getSessionType(), 
+                newSettings.getWebsiteBlacklist() != null ? newSettings.getWebsiteBlacklist() : new ArrayList<>(),
+                newSettings.getWebsiteWhitelist() != null ? newSettings.getWebsiteWhitelist() : new ArrayList<>()
+            ); // <-- ADDED Call
+        } // <-- ADDED Check
 
         // Update USB Monitoring (PnP)
         boolean shouldBlockUsb = newSettings.isBlockUsb();

@@ -7,7 +7,8 @@ import com.mongodb.client.MongoDatabase;
 import org.bson.Document;
 
 public class MongoDBHelper {
-    private static final String CONN_STR = "mongodb+srv://piyushutkar:IzjwOgkkXCjwmCWA@cmmscluster.ko4f8.mongodb.net/";
+    private static final String CONN_STR = System.getenv("MONGODB_URI") != null ? 
+        System.getenv("MONGODB_URI") : "mongodb://localhost:27017/classroom";
     private static final MongoClient mongoClient = MongoClients.create(CONN_STR);
     private static final MongoDatabase database = mongoClient.getDatabase("classroom");
 

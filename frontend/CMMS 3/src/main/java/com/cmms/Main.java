@@ -6,6 +6,7 @@ import com.cmms.dto.SessionSettings;
 import com.cmms.ui.RoleSelectionController;
 import com.cmms.ui.StudentMonitorController;
 import com.cmms.ui.TeacherDashboardController;
+import com.cmms.logging.SessionLoggerService;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -29,6 +30,7 @@ public class Main extends Application {
     private static Stage primaryStage;
     private static ApiService apiService;
     private static WebSocketService webSocketService;
+    private static SessionLoggerService sessionLoggerService;
 
     @Override
     public void start(Stage stage) throws Exception {
@@ -37,6 +39,7 @@ public class Main extends Application {
         // Initialize services
         apiService = new ApiService(API_BASE_URL);
         webSocketService = new WebSocketService(WEBSOCKET_URL);
+        sessionLoggerService = new SessionLoggerService();
         
         // Ensure critical network services are accessible
         try {
@@ -98,8 +101,10 @@ public class Main extends Application {
             
             // Inject services first (if applicable)
             if (controller instanceof ServiceAwareController) {
-                ((ServiceAwareController) controller).setApiService(apiService);
-                ((ServiceAwareController) controller).setWebSocketService(webSocketService);
+                ServiceAwareController serviceAware = (ServiceAwareController) controller;
+                serviceAware.setApiService(apiService);
+                serviceAware.setWebSocketService(webSocketService);
+                serviceAware.setSessionLoggerService(sessionLoggerService);
             }
 
             // Pass the session type to the specific controller method
@@ -143,8 +148,10 @@ public class Main extends Application {
             
             // Inject services first (if applicable)
             if (controller instanceof ServiceAwareController) {
-                ((ServiceAwareController) controller).setApiService(apiService);
-                ((ServiceAwareController) controller).setWebSocketService(webSocketService);
+                ServiceAwareController serviceAware = (ServiceAwareController) controller;
+                serviceAware.setApiService(apiService);
+                serviceAware.setWebSocketService(webSocketService);
+                serviceAware.setSessionLoggerService(sessionLoggerService);
             }
 
             // Pass the session data to the specific controller method
@@ -200,8 +207,10 @@ public class Main extends Application {
             
             Object controller = loader.getController();
             if (controller instanceof ServiceAwareController) {
-                ((ServiceAwareController) controller).setApiService(apiService);
-                ((ServiceAwareController) controller).setWebSocketService(webSocketService);
+                ServiceAwareController serviceAware = (ServiceAwareController) controller;
+                serviceAware.setApiService(apiService);
+                serviceAware.setWebSocketService(webSocketService);
+                serviceAware.setSessionLoggerService(sessionLoggerService);
             }
 
             setSceneRoot(root, title);
@@ -264,23 +273,28 @@ public class Main extends Application {
     
     // Helper method to extract the domain from a URL
     public static String getDomainFromUrl(String urlString) {
-        if (urlString == null) return null;
+        if (urlString == null || urlString.trim().isEmpty()) return null;
         try {
-            java.net.URL url = new java.net.URL(urlString);
-            return url.getHost();
-        } catch (java.net.MalformedURLException e) {
-            System.err.println("Error parsing URL to get domain: " + urlString + " - " + e.getMessage());
-            // Fallback for simple cases if URL parsing fails
-            String temp = urlString.replaceFirst("^(ws|wss|http|https)://", "");
-            int slashIndex = temp.indexOf('/');
-            if (slashIndex != -1) {
-                temp = temp.substring(0, slashIndex);
+            // Use java.net.URI as it handles ws/wss better than URL
+            java.net.URI uri = new java.net.URI(urlString);
+            String domain = uri.getHost();
+            // Check if the host is null (which can happen for invalid URIs like just "localhost")
+            if (domain == null) {
+                 // Very basic fallback for simple hostnames without scheme
+                 if (!urlString.contains("/") && !urlString.contains("://")) {
+                     return urlString; // Assume the whole string is the domain
+                 }
+                 System.err.println("Could not extract domain from URI (host was null): " + urlString);
+                 return null;
             }
-             int portIndex = temp.indexOf(':');
-            if (portIndex != -1) {
-                temp = temp.substring(0, portIndex);
+             // Handle IPv6 addresses in brackets
+            if (domain.startsWith("[") && domain.endsWith("]")) {
+                domain = domain.substring(1, domain.length() - 1);
             }
-            return temp.isEmpty() ? null : temp;
+            return domain;
+        } catch (java.net.URISyntaxException e) {
+            System.err.println("Error parsing URI to get domain: " + urlString + " - " + e.getMessage());
+            return null; // Return null if parsing fails
         }
     }
 

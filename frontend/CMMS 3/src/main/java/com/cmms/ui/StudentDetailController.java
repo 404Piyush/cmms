@@ -1,5 +1,6 @@
 package com.cmms.ui;
 
+import com.cmms.dto.StudentInfo;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -32,14 +33,14 @@ public class StudentDetailController {
     public void setStudentDetails(StudentInfo student) {
         if (student != null) {
             studentNameLabel.setText(student.studentName() != null ? student.studentName() : "N/A");
+            studentIdLabel.setText(student.studentId() != null ? student.studentId() : "N/A");
             rollNoLabel.setText(student.rollNo() != null ? student.rollNo() : "N/A");
             classLabel.setText(student.studentClass() != null ? student.studentClass() : "N/A");
-            studentIdLabel.setText(student.studentId());
         } else {
-            studentNameLabel.setText("Error");
+            studentNameLabel.setText("Error: No student data");
+            studentIdLabel.setText("Error");
             rollNoLabel.setText("Error");
             classLabel.setText("Error");
-            studentIdLabel.setText("Error");
         }
     }
 

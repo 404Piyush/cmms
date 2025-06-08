@@ -1,44 +1,45 @@
 # Dependencies
-node_modules
+node_modules/
+backend/node_modules/
 
 # Environment variables
 .env
-# .frontend # Commented out - might be a typo, use frontend/ if needed
+backend/.env
 
 # Logs
-logs.txt
-logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+logs/
 
-# Optional sensitive files
-# e.g., private keys, config files with passwords
+# Runtime data
+pids/
+*.pid
+*.seed
 
-# OS generated files
+# Coverage directory used by tools like istanbul
+coverage/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
 .DS_Store
 Thumbs.db
 
-# Java / Maven
+# Build artifacts
 target/
-*.class
-*.jar
-*.war
-*.ear
-*.exe
-*.zip
-dependency-reduced-pom.xml
-pom.properties
-createdFiles.lst
-inputFiles.lst
+build/
+dist/
 
-# IDE files (optional)
-.idea/
-*.iml
-.vscode/
+# Temporary files
+tmp/
+temp/
 
-# Frontend specific build/dist folders (if applicable, uncomment/adjust)
-# frontend/dist/
-# frontend/build/
+# Database
+*.db
+*.sqlite
 
+# Personal files to be deleted
+to-be-deleted/

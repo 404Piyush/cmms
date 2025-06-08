@@ -5,8 +5,14 @@ import com.cmms.ServiceAwareController; // Interface for service injection
 import com.cmms.dto.Session; // The new Session DTO
 import com.cmms.dto.ApiResponse; // Assuming ApiService returns this
 import com.cmms.dto.WebSocketMessage; // Import WebSocketMessage DTO
+import com.cmms.dto.SessionSettings; // ADDED IMPORT
+import com.cmms.dto.StudentInfo; // IMPORT MOVED DTO
 import com.cmms.service.ApiService;
 import com.cmms.service.WebSocketService;
+import com.cmms.logging.SessionLoggerService; // Corrected import path
+import com.cmms.driverManager.IDriverManager;
+import com.cmms.driverManager.DriverManagerWin;
+import com.cmms.util.OSValidator;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections; // Import for observable list
@@ -32,16 +38,7 @@ import java.util.Map;
 import java.util.UUID; // Added for unique teacher ID generation
 import java.util.HashMap;
 import java.util.ArrayList;
-
-// Simple record to hold student display information
-record StudentInfo(String studentId, String studentName, String rollNo, String studentClass) {
-    @Override
-    public String toString() {
-        // This controls what is displayed in the ListView by default if no cell factory is set
-        // We'll use a cell factory for better control, but this is a fallback.
-        return studentName != null ? studentName : studentId; 
-    }
-}
+import java.util.Collections; // Added for empty list
 
 // Implement ServiceAwareController AND WebSocketListener
 public class TeacherDashboardController implements ServiceAwareController, WebSocketService.WebSocketListener {
@@ -51,6 +48,8 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
     private Session activeSession; // Use the DTO
     private ApiService apiService;
     private WebSocketService webSocketService; // Might be used for real-time updates
+    private SessionLoggerService sessionLoggerService; // Add logger service instance
+    private IDriverManager driverManager; // ADDED: Driver manager instance
 
     @FXML private Label welcomeLabel;
     @FXML private Label sessionCodeLabel;
@@ -121,6 +120,26 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
         // com.cmms.networkManager.NetworkManagerWin.whitelistCriticalServices();
 
         // Start listening for student connections/messages
+    }
+
+    // Implement setter for SessionLoggerService
+    @Override
+    public void setSessionLoggerService(SessionLoggerService sessionLoggerService) {
+        this.sessionLoggerService = sessionLoggerService;
+        // *** ADDED: Instantiate DriverManager here, now that logger is available ***
+        if (OSValidator.isWindows()) {
+             try {
+                 this.driverManager = new DriverManagerWin(this.sessionLoggerService);
+             } catch (Exception e) {
+                 logToStatus("Error initializing Windows USB Manager: " + e.getMessage());
+                 System.err.println("Failed to create DriverManagerWin: " + e);
+                 showAlert("Initialization Error", "Failed to initialize the USB management component. USB blocking may not function.");
+                 this.driverManager = null; // Ensure it's null on error
+             }
+        } else {
+            logToStatus("USB management is only supported on Windows.");
+            this.driverManager = null;
+        }
     }
 
     // Removed setMainController
@@ -248,20 +267,36 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
                     String actualSessionCode = response.getSessionCode();
                     activeSession = new Session(actualSessionCode);
                     sessionCodeLabel.setText("Session Code: " + actualSessionCode);
-                    statusLabel.setText("Session started. Authenticating WebSocket...");
-                    connectedStudents.clear(); // Clear student list on new session
-                    connectedStudents.add(new StudentInfo("Waiting for students...", null, null, null)); // Initial message
-                    endSessionButton.setDisable(false);
-                    copySessionCodeButton.setDisable(false);
-                    startSessionButton.setDisable(true);
+                    statusLabel.setText("Session '[" + actualSessionCode + "]' started. Waiting for students...");
+                    copySessionCodeButton.setDisable(false); // Enable copy button
 
-                    // Enable Settings Tab
-                    if (mainTabPane.getTabs().size() > 1) {
-                        mainTabPane.getTabs().get(1).setDisable(false);
+                    // Store auth token from response (REMOVED - ApiService stores it internally)
+                    // apiService.setTeacherAuthToken(response.getToken());
+
+                    // Try to connect WebSocket after getting session code & token
+                    if (webSocketService != null && apiService.getTeacherAuthToken() != null) {
+                         logToStatus("Connecting and authenticating WebSocket...");
+                         // Use connectAndAuthenticate instead of separate connect/auth
+                         webSocketService.connectAndAuthenticate(apiService.getTeacherAuthToken()); 
+                    } else {
+                         logToStatus("Cannot connect WebSocket: Service unavailable or token missing.");
+                         // Handle error? Maybe alert user?
                     }
                     
-                    // Authenticate WebSocket (which will trigger fetching settings)
-                    authenticateWebSocket(); 
+                    // *** INTEGRATION: Start session logging ***
+                    if (sessionLoggerService != null) {
+                        // Settings object will be logged later when received via WebSocket
+                        sessionLoggerService.startSession(activeSession.getSessionCode(), null); 
+                    }
+
+                    // *** ADDED: Attempt to apply initial USB block based on *desired* type ***
+                    applyInitialUsbBlockState(this.desiredSessionType); 
+
+                    // Enable end/logout, disable start
+                    startSessionButton.setDisable(true);
+                    endSessionButton.setDisable(false);
+                    logoutButton.setDisable(true); // Can't logout during session
+                    mainTabPane.getTabs().get(1).setDisable(false); // Enable Settings tab
 
                 } else {
                     // FAILURE: Reset UI to initial state
@@ -311,49 +346,51 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
         String sessionCodeToEnd = activeSession.getSessionCode();
         setLoadingState(true, "Ending session...");
 
+        // *** ADDED: Disable USB blocking BEFORE making API call ***
+        if (driverManager != null) {
+            try {
+                logToStatus("Disabling USB blocking...");
+                driverManager.blockUsbDevices(false);
+            } catch (Exception e) {
+                logToStatus("Error occurred while re-enabling USB devices: " + e.getMessage());
+                System.err.println("Error disabling USB block: " + e);
+                // Continue ending session even if unblocking fails, but log it.
+            }
+        }
+        
         // Background task for API call
         Task<ApiResponse<Object>> endSessionTask = new Task<>() {
             @Override
             protected ApiResponse<Object> call() throws Exception {
-                // Use the actual API call
-                 return apiService.endSession(sessionCodeToEnd);
+                if (activeSession != null && activeSession.getSessionCode() != null) { // Use getSessionCode()
+                    return apiService.endSession(activeSession.getSessionCode()); // Use getSessionCode()
+                } else {
+                    // Should not happen if UI state is correct
+                    System.err.println("Error: Tried to end session, but no active session code found.");
+                    return null;
+                }
             }
         };
 
         endSessionTask.setOnSucceeded(workerStateEvent -> {
-             ApiResponse<Object> response = endSessionTask.getValue(); 
+            ApiResponse<Object> response = endSessionTask.getValue();
             Platform.runLater(() -> {
                 setLoadingState(false, "");
-                logToStatus("Session " + sessionCodeToEnd + " ended via API.");
+                // SUCCESS CHECK: If handleOkHttpResponse didn't throw and returned non-null (or null for 204?), it succeeded.
+                // A null response here AND no exception likely means the API call itself failed before reaching the server.
+                // We primarily rely on the absence of an exception in setOnFailed.
+                // The response object itself might be null for success (e.g., 204 No Content from endSession).
+                // So, simply reaching setOnSucceeded without error is the main success indicator.
                 
-                // --- Display Summary --- 
-                String summaryMessage = "Session ended successfully.";
-                if (response != null && response.getPayload() instanceof Map) {
-                    Map<String, Object> summary = (Map<String, Object>) response.getPayload(); // Assuming summary is in payload
-                    if (summary != null && summary.containsKey("summary")) { // Check if payload IS the summary or CONTAINS it
-                        summary = (Map<String, Object>) summary.get("summary");
-                    }
-                    // Safely extract summary data
-                    Object durationObj = summary != null ? summary.get("durationMinutes") : null;
-                    Object countObj = summary != null ? summary.get("studentCountAtEnd") : null;
-                    long duration = (durationObj instanceof Number) ? ((Number) durationObj).longValue() : -1;
-                    long count = (countObj instanceof Number) ? ((Number) countObj).longValue() : -1;
-                    
-                    summaryMessage += "\n\nSession Summary:";
-                    if (duration >= 0) summaryMessage += "\nDuration: " + duration + " minutes";
-                    if (count >= 0) summaryMessage += "\nStudents connected at end: " + count;
+                logToStatus("Session " + (activeSession != null ? activeSession.getSessionCode() : "?") + " ended via API."); // Use getSessionCode()
+
+                 // *** INTEGRATION: End session logging ***
+                if (sessionLoggerService != null) {
+                    sessionLoggerService.endSession();
                 }
-                // Use Main.showInfo as it's a static utility method in Main
-                Main.showInfo("Session Ended", summaryMessage); 
-                // --- End Summary Display ---
+
+                resetSessionUI(); // Reset UI elements
                 
-                resetSessionUI(); // Reset UI elements AFTER showing summary
-                
-                // Disconnect WS - Moved this logic to backend during endSession
-                // if (webSocketService != null && webSocketService.isConnected()) {
-                //    webSocketService.disconnect(); 
-                // }
-                 apiService.clearTeacherToken(); // Clear stored token only on success
             });
         });
 
@@ -564,34 +601,39 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
 
     // Helper to reset UI state when session ends or fails to start
     private void resetSessionUI() {
-        sessionCodeLabel.setText("Session Code: N/A");
-        connectedStudents.clear(); 
-        currentWebsiteList.clear(); // Clear settings lists
-        currentAppList.clear();
-        websiteListLabel.setText("Website Management (N/A)"); // Reset label
-        activeSession = null; 
+        logToStatus("Resetting session UI.");
+        activeSession = null;
+        isWebSocketAuthenticated = false;
         currentSessionType = null;
-        endSessionButton.setDisable(true);
-        copySessionCodeButton.setDisable(true);
+        currentUsbBlocked = false; // Reset USB state tracking
+        sessionCodeLabel.setText("Session Code: N/A");
+        statusLabel.setText("Ready to start a new session.");
+        connectedStudents.clear();
+        currentWebsiteList.clear();
+        currentAppList.clear();
+        studentLogs.clear(); // Clear student logs
         startSessionButton.setDisable(false);
-        // Disable settings tab
+        endSessionButton.setDisable(true);
+        logoutButton.setDisable(false);
+        copySessionCodeButton.setDisable(true);
+        copySessionCodeButton.setText(originalCopyButtonText);
+        copySessionCodeButton.setStyle(originalCopyButtonStyle);
         if (mainTabPane.getTabs().size() > 1) {
-            mainTabPane.getTabs().get(1).setDisable(true);
+            mainTabPane.getTabs().get(1).setDisable(true); // Disable Settings tab
         }
-        isWebSocketAuthenticated = false; 
-        currentSessionType = null; // Also reset session type
-        // Hide panes directly using setVisible/setManaged
-        if (websiteManagementPane != null) {
-            websiteManagementPane.setVisible(false);
-            websiteManagementPane.setManaged(false);
+        setLoadingState(false, "");
+        
+        // *** ADDED: Ensure USB blocking is disabled on UI reset ***
+        // This is a safeguard in case handleEndSession failed to run it.
+        if (driverManager != null) {
+            try {
+                logToStatus("Ensuring USB blocking is disabled (UI Reset)...");
+                driverManager.blockUsbDevices(false);
+            } catch (Exception e) {
+                logToStatus("Error ensuring USB devices re-enabled on UI reset: " + e.getMessage());
+                System.err.println("Error in resetSessionUI -> blockUsbDevices(false): " + e);
+            }
         }
-        if (appManagementPane != null) {
-             appManagementPane.setVisible(false);
-             appManagementPane.setManaged(false);
-        }
-        websiteListLabel.setText("Website Management (N/A)"); 
-        // ... reset buttons, disable settings tab ...
-        updateButtonStates(); 
     }
 
     // --- WebSocketListener Implementation ---
@@ -735,55 +777,70 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
     }
 
     private void handleStudentJoined(WebSocketMessage message) {
-         if (message.getPayload() != null) {
-             Map<String, Object> payload = message.getPayload();
-             String studentId = (String) payload.get("studentId");
-             String studentName = (String) payload.get("studentName");
-             String rollNo = (String) payload.get("rollNo");
-             String studentClass = (String) payload.get("class");
-             
-             if (studentId != null) {
-                 logToStatus("Student joined: " + studentName + " (" + studentId + ")");
-                 StudentInfo newStudent = new StudentInfo(studentId, studentName != null ? studentName : studentId, rollNo, studentClass);
-                 // Avoid duplicates if message is received multiple times
-                 if (connectedStudents.stream().noneMatch(s -> s.studentId().equals(studentId))) {
-                     connectedStudents.add(newStudent);
-                     studentLogs.put(studentId, new ArrayList<>()); // Initialize log list
-                 }
-             }
-         }
+        Platform.runLater(() -> {
+            try {
+                // Assuming payload is a Map<String, Object> containing student details
+                Map<String, Object> payload = (Map<String, Object>) message.getPayload();
+                String studentId = (String) payload.get("studentId");
+                String studentName = (String) payload.get("studentName");
+                String rollNo = (String) payload.get("rollNo"); // Added rollNo
+                String studentClass = (String) payload.get("class"); // Added class
+                
+                if (studentId != null) {
+                    StudentInfo newStudent = new StudentInfo(studentId, studentName, rollNo, studentClass);
+                    // Prevent duplicates if message is received multiple times
+                    if (!connectedStudents.stream().anyMatch(s -> s.studentId().equals(studentId))) {
+                        connectedStudents.add(newStudent);
+                        studentLogs.put(studentId, new ArrayList<>()); // Initialize log list for the student
+                        logToStatus("Student joined: " + (studentName != null ? studentName : studentId));
+                        
+                        // *** INTEGRATION: Log student joined (using StudentInfo) ***
+                        if (sessionLoggerService != null) {
+                            sessionLoggerService.studentJoined(newStudent); // Pass the full object
+                        }
+                    }
+                } else {
+                    logToStatus("Student joined (ID): " + studentId);
+                }
+            } catch (Exception e) {
+                logToStatus("Error handling student_joined message: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
     }
     
     private void handleStudentLeft(WebSocketMessage message) {
-        if (message.getPayload() != null && message.getPayload().containsKey("studentId")) {
-             String studentId = (String) message.getPayload().get("studentId");
-             StudentInfo leavingStudent = connectedStudents.stream()
-                                    .filter(s -> s.studentId().equals(studentId))
-                                    .findFirst().orElse(null);
-                                    
-             String logMessage;
-             if (leavingStudent != null) {
-                logToStatus("Student left: " + leavingStudent.studentName() + " (" + studentId + ")");
-                logMessage = "Left session.";
-                connectedStudents.remove(leavingStudent);
-             } else {
-                 logToStatus("Student left (ID): " + studentId);
-                 logMessage = "Left session (details unavailable).";
-                 connectedStudents.removeIf(s -> s.studentId().equals(studentId));
-             }
-             
-             // Add log entry for the leaving student
-             String timeStamp = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
-             String logEntry = String.format("[%s] [SESSION] %s", timeStamp, logMessage);
-             List<String> logs = studentLogs.computeIfAbsent(studentId, k -> new ArrayList<>()); // Get or create log list
-             logs.add(logEntry); // Add the log
-             // Don't remove the log list from the map immediately, keep history?
-             // studentLogs.remove(studentId); 
-
-             if (connectedStudents.isEmpty()) {
-                 // studentListView.setPlaceholder(new Label("Waiting for students..."));
-             }
-         }
+        Platform.runLater(() -> {
+            try {
+                // Assuming payload is Map<String, String> like {"studentId": "someId"}
+                Map<String, Object> payload = (Map<String, Object>) message.getPayload();
+                String studentId = (String) payload.get("studentId");
+                if (studentId != null) {
+                    // Find student info to get name for status message
+                    StudentInfo leavingStudent = connectedStudents.stream()
+                        .filter(s -> s.studentId().equals(studentId))
+                        .findFirst()
+                        .orElse(null);
+                        
+                    boolean removed = connectedStudents.removeIf(s -> s.studentId().equals(studentId));
+                    // Don't remove logs: studentLogs.remove(studentId);
+                    
+                    if (removed) {
+                        logToStatus("Student left: " + (leavingStudent != null && leavingStudent.studentName() != null ? leavingStudent.studentName() : studentId));
+                        
+                        // *** INTEGRATION: Log student left ***
+                        if (sessionLoggerService != null) {
+                            sessionLoggerService.studentLeft(studentId);
+                        }
+                    }
+                } else {
+                    logToStatus("Student left (ID): " + studentId);
+                }
+            } catch (Exception e) {
+                logToStatus("Error handling student_left message: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
     }
     
     private void handleForceDisconnect() {
@@ -794,47 +851,43 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
 
     // Handles settings updates from initial fetch or server push
     private void handleSettingsUpdate(WebSocketMessage message) {
-        if (message.getPayload() == null) return;
-        logToStatus("Processing session settings data..."); 
-        Map<String, Object> payload = message.getPayload();
-        boolean listUpdated = false;
-        boolean typeChanged = false;
+        logToStatus("Received settings update from server.");
+        if (message.getPayload() instanceof Map) {
+            SessionSettings settings = parseSessionSettings((Map<String, Object>) message.getPayload());
+            if (settings != null) {
+                logToStatus("Applying received settings: Type="+settings.getSessionType()+", USB="+settings.isBlockUsb());
+                
+                // Store current settings
+                this.currentSessionType = settings.getSessionType();
+                this.currentUsbBlocked = settings.isBlockUsb(); 
 
-        // --- Start Critical Section: Update Internal State --- 
-        if (payload.containsKey("sessionType")) {
-            String newType = (String) payload.get("sessionType");
-            if (this.currentSessionType == null || !newType.equals(this.currentSessionType)) { 
-                this.currentSessionType = newType;
-                typeChanged = true; 
-                System.out.println("handleSettingsUpdate: currentSessionType set to: " + this.currentSessionType);
-            }
-        }
-        if (payload.containsKey("blockUsb")) {
-             this.currentUsbBlocked = Boolean.TRUE.equals(payload.get("blockUsb"));
-        }
-        
-        // Update website list based on the CURRENT session type
-        if (this.currentSessionType != null) { // Ensure type is set before checking lists
-            if (("BLOCK_WEBSITES".equals(this.currentSessionType) || "BLOCK_APPS_WEBSITES".equals(this.currentSessionType)) 
-                && payload.containsKey("websiteBlacklist")) {
-                 List<String> list = (List<String>) payload.get("websiteBlacklist");
-                 currentWebsiteList.setAll(list != null ? list : List.of());
-                 listUpdated = true;
-            } else if ("ALLOW_WEBSITES".equals(this.currentSessionType) && payload.containsKey("websiteWhitelist")) {
-                 List<String> list = (List<String>) payload.get("websiteWhitelist");
-                 currentWebsiteList.setAll(list != null ? list : List.of());
-                 listUpdated = true;
-            } else if (typeChanged) { // Clear list if type changed and specific list wasn't present
-                 currentWebsiteList.clear();
-                 listUpdated = true; 
+                // Update UI based on settings
+                Platform.runLater(() -> {
+                    // Update website list
+                    currentWebsiteList.setAll(getAllWebsitesFromSettings(settings));
+                    updateWebsiteListLabel(); // Update label based on type
+                    
+                    // Update app list 
+                    currentAppList.setAll(settings.getAppBlacklist() != null ? settings.getAppBlacklist() : Collections.emptyList());
+                    
+                    // Update pane visibility
+                    updateSettingsPanesVisibility();
+                    
+                    // *** ADDED: Apply USB block state based on received settings ***
+                    applyUsbBlockState(settings.isBlockUsb());
+                });
+                
+                // *** INTEGRATION: Log received settings ***
+                if (sessionLoggerService != null) {
+                    sessionLoggerService.settingsUpdated(settings);
+                }
+                
+            } else {
+                logToStatus("Failed to parse received session settings.");
             }
         } else {
-            System.err.println("handleSettingsUpdate: Cannot process website lists, currentSessionType is null.");
+            logToStatus("Received settings update with invalid payload format.");
         }
-       // --- End Critical Section --- 
-        
-        // Update UI visibility ONLY AFTER processing all settings
-        updateSettingsPanesVisibility(); 
     }
     
     // Handles app list updates - ONLY update data, do not trigger UI visibility change
@@ -862,7 +915,9 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
             if (!currentAppList.contains(appName)) {
                 currentAppList.add(appName); // Add to UI list if successful
                 logToStatus("App added: " + appName);
-            }            
+                // *** INTEGRATION: Update logger with current settings state ***
+                updateLoggerWithCurrentSettings();
+            }
             appInputField.clear(); // Clear input field
         } else {
             // Handle failure if needed (already handled by generic response handler?)
@@ -875,8 +930,12 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
         if (success && message.getPayload() != null && message.getPayload().containsKey("app_name")) {
             String appName = (String) message.getPayload().get("app_name");
             if (currentAppList.contains(appName)) {
-                currentAppList.remove(appName); // Remove from UI list if successful
-                logToStatus("App removed: " + appName);
+                boolean removed = currentAppList.remove(appName); // Remove from UI list if successful
+                if (removed) {
+                    logToStatus("App removed: " + appName);
+                    // *** INTEGRATION: Update logger with current settings state ***
+                    updateLoggerWithCurrentSettings();
+                }
             }            
         } else {
              // Handle failure if needed
@@ -884,6 +943,36 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
         }
     }
     
+    // *** ADDED HELPER ***
+    // Helper method to create a snapshot of current settings and send to logger
+    private void updateLoggerWithCurrentSettings() {
+        if (sessionLoggerService == null || currentSessionType == null) {
+             logToStatus("Cannot update logger settings: Service unavailable or session type unknown.");
+             return;
+        }
+        
+        // Create a temporary DTO reflecting the current UI state
+        SessionSettings currentSettingsSnapshot = new SessionSettings();
+        currentSettingsSnapshot.setSessionType(currentSessionType);
+        currentSettingsSnapshot.setBlockUsb(currentUsbBlocked);
+        currentSettingsSnapshot.setAppBlacklist(new ArrayList<>(currentAppList)); // Use current app list
+        
+        // Determine which website list is relevant based on mode
+        if (("BLOCK_WEBSITES".equals(currentSessionType) || "BLOCK_APPS_WEBSITES".equals(currentSessionType))) {
+            currentSettingsSnapshot.setWebsiteBlacklist(new ArrayList<>(currentWebsiteList));
+            currentSettingsSnapshot.setWebsiteWhitelist(Collections.emptyList());
+        } else if ("ALLOW_WEBSITES".equals(currentSessionType)) {
+            currentSettingsSnapshot.setWebsiteWhitelist(new ArrayList<>(currentWebsiteList));
+            currentSettingsSnapshot.setWebsiteBlacklist(Collections.emptyList());
+        } else { // BLOCK_APPS mode
+            currentSettingsSnapshot.setWebsiteBlacklist(Collections.emptyList());
+            currentSettingsSnapshot.setWebsiteWhitelist(Collections.emptyList());
+        }
+        
+        logToStatus("Updating logger with latest settings snapshot after app change.");
+        sessionLoggerService.settingsUpdated(currentSettingsSnapshot);
+    }
+
     private void updateWebsiteListLabel() {
         if ("BLOCK_WEBSITES".equals(this.currentSessionType) || "BLOCK_APPS_WEBSITES".equals(this.currentSessionType)) {
             websiteListLabel.setText("Blocked Websites (Blacklist)");
@@ -1200,11 +1289,28 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
         String timeStamp = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
         String logEntry = String.format("[%s] [%s] %s", timeStamp, updateType.toUpperCase(), data); // Simple format
 
-        // Add log to the specific student's list
+        // Add log to the specific student's list IN MEMORY (for detail view)
         List<String> logs = studentLogs.computeIfAbsent(studentId, k -> new ArrayList<>());
         logs.add(logEntry);
         
-        System.out.println("Log added for student " + studentId + ": " + logEntry);
+        // *** INTEGRATION: Log to individual student file ***
+        if (sessionLoggerService != null) {
+             // Find the StudentInfo object for this studentId
+            StudentInfo studentInfo = connectedStudents.stream()
+                    .filter(s -> s.studentId().equals(studentId))
+                    .findFirst()
+                    .orElse(null);
+            
+            if (studentInfo != null) {
+                 // Format message slightly differently for the file log
+                 String fileLogMessage = String.format("[%s] %s", updateType.toUpperCase(), data);
+                 sessionLoggerService.logStudentActivity(studentInfo, fileLogMessage);
+            } else {
+                 logToStatus("Could not log activity for student " + studentId + ": Details not found.");
+            }
+        }
+        
+        System.out.println("Log added for student " + studentId + ": " + logEntry); // Keep console log
 
         // TODO: If the detail window for this student is open, update it.
     }
@@ -1244,5 +1350,106 @@ public class TeacherDashboardController implements ServiceAwareController, WebSo
             normalized = normalized.substring(4);
         }
         return normalized;
+    }
+
+    // Helper to parse settings from a payload Map (copied from StudentMonitorController)
+    private SessionSettings parseSessionSettings(Map<String, Object> payload) {
+         SessionSettings settings = new SessionSettings(); // Create a new DTO
+         // Use safe casting and null checks
+         Object sessionType = payload.get("sessionType");
+         if (sessionType instanceof String) settings.setSessionType((String) sessionType);
+         
+         Object blockUsb = payload.get("blockUsb");
+         if (blockUsb instanceof Boolean) settings.setBlockUsb((Boolean) blockUsb);
+         
+         Object webBlacklist = payload.get("websiteBlacklist");
+         if (webBlacklist instanceof List) {
+             try {
+                 @SuppressWarnings("unchecked")
+                 List<String> list = (List<String>) webBlacklist;
+                 settings.setWebsiteBlacklist(list);
+             } catch (ClassCastException e) {
+                 logToStatus("Error parsing websiteBlacklist: " + e.getMessage());
+             }
+         }
+         
+         Object webWhitelist = payload.get("websiteWhitelist");
+          if (webWhitelist instanceof List) {
+             try {
+                 @SuppressWarnings("unchecked")
+                 List<String> list = (List<String>) webWhitelist;
+                 settings.setWebsiteWhitelist(list);
+             } catch (ClassCastException e) {
+                 logToStatus("Error parsing websiteWhitelist: " + e.getMessage());
+             }
+         }
+         
+         Object appBlacklist = payload.get("appBlacklist");
+          if (appBlacklist instanceof List) {
+             try {
+                 @SuppressWarnings("unchecked")
+                 List<String> list = (List<String>) appBlacklist;
+                 settings.setAppBlacklist(list);
+             } catch (ClassCastException e) {
+                 logToStatus("Error parsing appBlacklist: " + e.getMessage());
+             }
+         }
+         return settings;
+    }
+
+    // Helper to extract relevant website list based on mode (copied from StudentMonitorController, adapted)
+    private List<String> getAllWebsitesFromSettings(SessionSettings settings) {
+        if (settings == null) return List.of();
+        String type = settings.getSessionType();
+        if (type == null) return List.of();
+
+        if (("BLOCK_WEBSITES".equals(type) || "BLOCK_APPS_WEBSITES".equals(type)) && settings.getWebsiteBlacklist() != null) {
+            return settings.getWebsiteBlacklist();
+        } else if ("ALLOW_WEBSITES".equals(type) && settings.getWebsiteWhitelist() != null) {
+            return settings.getWebsiteWhitelist();
+        } else {
+            return List.of(); // Return empty list for other modes or if list is null
+        }
+    }
+
+    // *** ADDED HELPER METHOD ***
+    private void applyInitialUsbBlockState(String sessionType) {
+        boolean shouldBlock = false;
+        if (sessionType != null) {
+             // Determine if the *initial* session type requires USB blocking
+             shouldBlock = sessionType.contains("USB") || sessionType.equals("BLOCK_ALL"); // Adjust logic as needed for your types
+        }
+        logToStatus("Applying initial USB block state based on desired type '" + sessionType + "': " + (shouldBlock ? "Block" : "Allow"));
+        applyUsbBlockState(shouldBlock);
+    }
+
+    // *** ADDED HELPER METHOD ***
+    private void applyUsbBlockState(boolean block) {
+        if (driverManager != null) {
+            String initialLog = (block ? "Enabling" : "Disabling") + " USB Mass Storage blocking...";
+            logToStatus(initialLog);
+            try {
+                // *** UPDATED: Capture status message and log it ***
+                String status = driverManager.blockUsbDevices(block);
+                if (status != null) {
+                    logToStatus("USB Blocking: " + status); // Log summary to UI status
+                } else {
+                    // If null returned, it means no relevant action was taken (e.g., unblocking when nothing blocked)
+                    logToStatus(initialLog + " (No action needed/taken)"); 
+                }
+                this.currentUsbBlocked = block; // Update internal state tracking
+            } catch (Exception e) {
+                String errorMsg = "Error applying USB block state (" + block + "): " + e.getMessage();
+                logToStatus(errorMsg);
+                System.err.println("Error in applyUsbBlockState: " + e);
+                showAlert("USB Blocking Error", "Failed to " + (block ? "enable" : "disable") + " USB blocking. Check logs and Admin privileges.");
+            }
+        } else {
+            logToStatus("Cannot apply USB block state: Driver manager not available.");
+            // Only show alert if trying to block but manager isn't there?
+             if (block) {
+                 showAlert("USB Blocking Error", "Cannot block USB devices. Feature not initialized (Non-Windows or error).");
+             }
+        }
     }
 } 

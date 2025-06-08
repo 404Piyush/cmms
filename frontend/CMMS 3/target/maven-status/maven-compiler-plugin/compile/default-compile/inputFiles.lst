@@ -3,12 +3,16 @@ C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\c
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\driverManager\DriverManager.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\driverManager\DriverManagerMac.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\driverManager\DriverManagerWin.java
+C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\driverManager\IDriverManager.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\driverManager\UsbMonitorService.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\dto\ApiResponse.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\dto\Session.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\dto\SessionSettings.java
+C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\dto\StudentInfo.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\dto\WebSocketMessage.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\Launcher.java
+C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\logging\SessionLogData.java
+C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\logging\SessionLoggerService.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\Main.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\networkManager\FirewallManager.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\networkManager\NetworkManager.java
@@ -33,5 +37,6 @@ C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\c
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\ui\StudentMonitorController.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\ui\TeacherConfigController.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\ui\TeacherDashboardController.java
+C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\util\OSValidator.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\utils\AdminChecker.java
 C:\Users\piyus\OneDrive\Desktop\cmms-backend\frontend\CMMS 3\src\main\java\com\cmms\utils\MongoDBHelper.java

@@ -6,6 +6,7 @@ import com.cmms.dto.ApiResponse;
 import com.cmms.dto.SessionSettings;
 import com.cmms.service.ApiService;
 import com.cmms.service.WebSocketService;
+import com.cmms.logging.SessionLoggerService;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
@@ -45,6 +46,12 @@ public class StudentJoinController implements ServiceAwareController {
     @Override
     public void setWebSocketService(WebSocketService webSocketService) {
         this.webSocketService = webSocketService;
+    }
+
+    @Override
+    public void setSessionLoggerService(SessionLoggerService sessionLoggerService) {
+        // This controller currently does not use the logger service.
+        // Implementation can be added later if needed.
     }
 
     @FXML
