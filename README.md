@@ -324,6 +324,11 @@ If you encounter any issues or have questions:
 - Special thanks to the open-source community
 
 ---
+## 👥 Contributors
+
+- [@404Piyush](https://github.com/404Piyush) – Lead Developer & System Architect
+- [@Hitansh1601](https://github.com/Hitansh1601) – Documentation & Report Preparation
+
 
 <div align="center">
   <strong>Happy Teaching! 🎓</strong>
